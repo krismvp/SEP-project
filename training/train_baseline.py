@@ -13,7 +13,7 @@ def train():
     print("Using device:", device)
 
     transform = transforms.Compose([
-        transforms.Resize((48, 48)),
+        transforms.Resize((64, 64)),
         transforms.ToTensor(),
         transforms.Normalize([0.5]*3, [0.5]*3)
     ])
