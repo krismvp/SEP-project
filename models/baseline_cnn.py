@@ -12,7 +12,7 @@ class SimpleCNN(nn.Module):
         self.dropout = nn.Dropout(0.3)
 
         # FER2013: 48x48 -> 24 -> 12 -> 6
-        self.fc1 = nn.Linear(128 * 6 * 6, 256)
+        self.fc1 = nn.Linear(128 * 8 * 8, 256)
         self.fc2 = nn.Linear(256, num_classes)
 
     def forward(self, x):

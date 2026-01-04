@@ -13,13 +13,13 @@ def train():
     print("Using device:", device)
 
     transform = transforms.Compose([
-        transforms.Resize((48, 48)),
+        transforms.Resize((64, 64)),
         transforms.ToTensor(),
         transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
-    train_data = datasets.ImageFolder("data/train", transform=transform)
-    val_data = datasets.ImageFolder("data/val", transform=transform)
+    train_data = datasets.ImageFolder("data/FER13/train", transform=transform)
+    val_data = datasets.ImageFolder("data/FER13/test", transform=transform)
 
     train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
@@ -46,7 +46,23 @@ def train():
             correct += (preds == labels).sum().item()
 
         acc = 100 * correct / total
-        print(f"Epoch {epoch+1}: Train Acc = {acc:.2f}%")
+
+        model.eval()
+        correct, total = 0, 0
+        with torch.no_grad():
+          for imgs, labels in val_loader:
+              imgs, labels = imgs.to(device), labels.to(device)
+              outputs = model(imgs)
+              _, preds = torch.max(outputs, 1)
+              total += labels.size(0)
+              correct += (preds == labels).sum().item()
+        
+        val_acc = 100 * correct / total
+        print(
+            f"Epoch {epoch+1}: "
+            f"Train Acc = {acc:.2f}% | "
+            f"Val Acc = {val_acc:.2f}%"
+        )
 
     torch.save(model.state_dict(), "baseline_cnn.pth")
 
