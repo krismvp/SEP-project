@@ -22,3 +22,5 @@ class SimpleCNN(nn.Module):
         x = self.relu(self.fc1(x))
         x = self.dropout(x)
         return self.fc2(x)
+
+# commit test
