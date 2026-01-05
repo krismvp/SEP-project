@@ -1,0 +1,15 @@
+# core
+numpy
+
+# deep learning
+torch
+torchvision
+
+# data & utils
+opencv-python
+scikit-learn
+tqdm
+pyyaml
+
+# visualization
+matplotlib
