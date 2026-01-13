@@ -4,8 +4,9 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 class FERDataset(Dataset):
-    def __init__(self, df, indices, transform=None):
-        self.data = df.iloc[indices].reset_index(drop=True)
+    def __init__(self, df, transform=None):
+        # df already represents a fixed split (train or validation)
+        self.data = df.reset_index(drop=True)
         self.transform = transform
     
     def __len__(self):
