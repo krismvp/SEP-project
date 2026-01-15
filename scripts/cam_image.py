@@ -1,4 +1,3 @@
-# scripts/cam_image.py
 import argparse
 import os
 import sys
