@@ -20,7 +20,7 @@ def make_fer_loaders(data_path, batch_size=64, val_split=0.1, seed=42):
         transform=fer_train_transforms(),
     )
     val_dataset = datasets.ImageFolder(
-        root=f"{data_path}/train",
+        root=f"{data_path}/val",
         transform=fer_eval_transforms(),
     )
 
