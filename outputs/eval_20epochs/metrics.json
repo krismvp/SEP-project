@@ -1,0 +1,16 @@
+{
+  "split": "test",
+  "weights": "outputs\\resnet_uni\\resnet18_best.pth",
+  "num_classes": 6,
+  "in_channels": 1,
+  "batch_size": 64,
+  "accuracy": 0.4674003900808025,
+  "per_class_accuracy": [
+    0.6941544885177453,
+    0.0,
+    0.3427734375,
+    0.8776775648252536,
+    0.6171938361719383,
+    0.016840417000801924
+  ]
+}
