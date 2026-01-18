@@ -1,4 +1,3 @@
-import argparse
 import os
 
 import torch
@@ -150,30 +149,4 @@ def train(
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train ResNet-18 on FER data.")
-    parser.add_argument("--data-path", default="data/FER13")
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--val-split", type=float, default=0.1)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output-dir", default="outputs")
-    parser.add_argument("--patience", type=int, default=5)
-    args = parser.parse_args()
-
-    history = train(
-        data_path=args.data_path,
-        batch_size=args.batch_size,
-        epochs=args.epochs,
-        lr=args.lr,
-        val_split=args.val_split,
-        seed=args.seed,
-        output_dir=args.output_dir,
-        patience=args.patience,
-    )
-    print(f"Best epoch by val accuracy: {history['best_epoch']}")
-
-
-if __name__ == "__main__":
-    main()
+__all__ = ["train"]
