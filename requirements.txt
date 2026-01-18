@@ -10,6 +10,7 @@ opencv-python
 scikit-learn
 tqdm
 pyyaml
+gdown
 
 # visualization
 matplotlib
