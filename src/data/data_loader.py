@@ -8,11 +8,11 @@ from .transforms import (
       fer_train_transforms, fer_eval_transforms
 )
 RAF_MAP = {
-    '1': 0, '2': 1, '4': 2, '5': 3, '6': 4, '7': 5
+    '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5
 }
 
 FER_MAP = {
-    'surprise': 0, 'fear': 1, 'happy': 2, 'sad': 3, 'anger': 4, 'neutral': 5
+    'surprise': 0, 'fear': 1, 'disgust': 2, 'happy': 3, 'sad': 4, 'anger': 5
 }
 def filter_and_map(dataset, mapping):
     indices = []
@@ -89,4 +89,5 @@ if __name__ == "__main__":
         train_loader, val_loader = make_raf_loaders("data/DATASET")
         images, labels = next(iter(train_loader))
         print(f"Batch-Shape: {images.shape}")
+
 
