@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -173,8 +174,19 @@ def train(
     fig.savefig(plot_path, dpi=150)
     plt.close(fig)
 
+    metrics = {
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "train_accs": train_accs,
+        "val_accs": val_accs,
+    }
+    metrics_path = os.path.join(output_dir, "metrics.json")
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+
     print(f"Best epoch by val accuracy: {best_epoch}")
     print(f"Saved plots to: {plot_path}")
+    print(f"Saved metrics to: {metrics_path}")
 
 
 def main() -> None:
