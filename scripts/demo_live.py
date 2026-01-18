@@ -13,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.models.resnet_small import ResNet18
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-class_names =  ['angry', 'fear', 'neutral', 'happy', 'sad', 'surprise']
+class_names = ['Surprise', 'Fear', 'Disgust', 'Happy', 'Sad', 'Anger']
 
 model = ResNet18(num_classes=6, in_channels=1).to(device)
 model.load_state_dict(torch.load("outputs/resnet18_best.pth", map_location=device))
