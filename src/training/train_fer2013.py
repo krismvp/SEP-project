@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from src.data.data_loader import make_fer_loaders
+from src.data.fer_data import make_fer_loaders
 from src.models.resnet_small import ResNet18
 
 
