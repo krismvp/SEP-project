@@ -23,6 +23,17 @@ data/FER13/
     <class_name>/*.png
 ```
 
+FER+ (ImageFolder):
+```
+data/ferplus/
+  fer2013plus/fer2013/
+    train/
+      <class_name>/*.png
+    test/             # optional
+      <class_name>/*.png
+```
+If no `val/` folder exists, a random split is used.
+
 RAF-DB (CSV + images):
 ```
 data/RAF-DB/
@@ -82,10 +93,26 @@ python scripts/train_fer2013.py \
   --freeze-epochs 5
 ```
 
+## Train/Fine-tune FER+
+
+From scratch:
+```bash
+python scripts/train_ferplus.py --data-dir data/ferplus --epochs 20
+```
+
+Fine-tune from CelebA pretrain:
+```bash
+python scripts/train_ferplus.py \
+  --data-dir data/ferplus \
+  --pretrained-path outputs/pretrained_backbone.pth \
+  --freeze-epochs 5
+```
+
 ## Outputs
 
 - RAF-DB: `outputs/finetune/` (best/last checkpoints + `training_curves.png`)
 - FER2013: `outputs/` (`training_curves.png` and best-epoch log)
+- FER+: `outputs/ferplus/` (best/last checkpoints + `training_curves.png`)
 - Pretrain: `outputs/pretrained_backbone.pth`
 
 Use `--output-dir` to avoid overwriting previous runs.
