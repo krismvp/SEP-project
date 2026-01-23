@@ -12,7 +12,7 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 from PIL import Image
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-class_names = ['Surprise', 'Fear', 'Disgust', 'Happy', 'Sad', 'Anger']
+class_names = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise']
 
 model = ResNet18(num_classes=6, in_channels=1).to(device)
 model.load_state_dict(torch.load("outputs/resnet18_best.pth", map_location=device))
