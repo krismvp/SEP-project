@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.training.train_resnet import train
+from src.training.train_fer2013 import train_fer2013
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train ResNet-18 on FER data.")
+    parser = argparse.ArgumentParser(description="Train ResNet-18 on FER2013 data.")
     parser.add_argument("--data-path", default="data/FER13")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=20)
@@ -25,9 +25,21 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", default="outputs")
     parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument("--pretrained-path", type=str, default=None)
+    parser.add_argument("--freeze-epochs", type=int, default=0)
+    parser.add_argument("--head-lr", type=float, default=None)
+    parser.add_argument("--backbone-lr", type=float, default=None)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--num-channels", type=int, default=None)
+    parser.add_argument("--image-size", type=int, default=64)
     args = parser.parse_args()
 
-    history = train(
+    num_channels = args.num_channels
+    if num_channels is None:
+        num_channels = 3 if args.pretrained_path else 1
+
+    history = train_fer2013(
         data_path=args.data_path,
         batch_size=args.batch_size,
         epochs=args.epochs,
@@ -36,6 +48,14 @@ def main() -> None:
         seed=args.seed,
         output_dir=args.output_dir,
         patience=args.patience,
+        num_workers=args.num_workers,
+        num_channels=num_channels,
+        image_size=args.image_size,
+        pretrained_path=args.pretrained_path,
+        freeze_epochs=args.freeze_epochs,
+        backbone_lr=args.backbone_lr,
+        head_lr=args.head_lr,
+        weight_decay=args.weight_decay,
     )
 
     epochs_ran = len(history["train_losses"])

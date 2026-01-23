@@ -1,4 +1,5 @@
 import os
+from typing import Optional, Dict
 
 import torch
 import torch.nn as nn
@@ -38,7 +39,78 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def train(
+def _load_pretrained_backbone(model: nn.Module, checkpoint_path: str) -> None:
+    state = torch.load(checkpoint_path, map_location="cpu")
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    if not isinstance(state, dict):
+        raise ValueError("Checkpoint must be a state_dict or contain a state_dict key.")
+    conv1_weight = state.get("conv1.weight")
+    if isinstance(conv1_weight, torch.Tensor):
+        in_channels = _get_conv1_in_channels(model)
+        state = _adapt_conv1(state, in_channels)
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    if unexpected:
+        print(f"Unexpected keys in checkpoint: {unexpected}")
+    if missing:
+        print(f"Missing keys in checkpoint (expected for fc): {missing}")
+
+
+def _adapt_conv1(state: Dict[str, torch.Tensor], in_channels: int) -> Dict[str, torch.Tensor]:
+    weight = state["conv1.weight"]
+    if weight.shape[1] == in_channels:
+        return state
+    if in_channels == 1 and weight.shape[1] == 3:
+        state["conv1.weight"] = weight.mean(dim=1, keepdim=True)
+        return state
+    if in_channels == 3 and weight.shape[1] == 1:
+        state["conv1.weight"] = weight.repeat(1, 3, 1, 1) / 3.0
+        return state
+    return state
+
+
+def _get_conv1_in_channels(model: nn.Module) -> int:
+    conv1 = getattr(model, "conv1", None)
+    if isinstance(conv1, nn.Conv2d):
+        return int(conv1.in_channels)
+    raise ValueError("Model does not have a Conv2d conv1 layer.")
+
+
+def _freeze_backbone(model: nn.Module) -> None:
+    for name, param in model.named_parameters():
+        if not name.startswith("fc"):
+            param.requires_grad = False
+
+
+def _unfreeze_backbone(model: nn.Module) -> None:
+    for param in model.parameters():
+        param.requires_grad = True
+
+
+def _build_optimizer(
+    model: nn.Module,
+    backbone_lr: float,
+    head_lr: float,
+    weight_decay: float,
+) -> torch.optim.Optimizer:
+    backbone_params = []
+    head_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.startswith("fc"):
+            head_params.append(param)
+        else:
+            backbone_params.append(param)
+    param_groups = []
+    if backbone_params:
+        param_groups.append({"params": backbone_params, "lr": backbone_lr})
+    if head_params:
+        param_groups.append({"params": head_params, "lr": head_lr})
+    return optim.Adam(param_groups, weight_decay=weight_decay)
+
+
+def train_fer2013(
     data_path: str,
     batch_size: int,
     epochs: int,
@@ -47,21 +119,44 @@ def train(
     seed: int,
     output_dir: str,
     patience: int,
+    num_workers: int = 4,
+    num_channels: Optional[int] = None,
+    image_size: int = 64,
+    pretrained_path: Optional[str] = None,
+    freeze_epochs: int = 0,
+    backbone_lr: Optional[float] = None,
+    head_lr: Optional[float] = None,
+    weight_decay: float = 0.0,
 ):
     set_seed(seed)
     device = get_device()
     print(f"Using device: {device}")
 
     train_loader, val_loader = make_fer_loaders(
-        data_path, batch_size=batch_size, val_split=val_split, seed=seed
+        data_path,
+        batch_size=batch_size,
+        val_split=val_split,
+        seed=seed,
+        num_workers=num_workers,
+        num_channels=num_channels or 1,
+        image_size=image_size,
     )
 
     num_classes = infer_num_classes(train_loader.dataset)
-    in_channels = infer_in_channels(train_loader.dataset)
+    in_channels = num_channels if num_channels is not None else infer_in_channels(train_loader.dataset)
 
     model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
+    if pretrained_path:
+        _load_pretrained_backbone(model, pretrained_path)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    head_lr = head_lr if head_lr is not None else lr
+    if backbone_lr is None:
+        backbone_lr = lr if pretrained_path is None else lr * 0.1
+
+    if freeze_epochs > 0 and pretrained_path:
+        _freeze_backbone(model)
+    optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
 
     train_losses = []
     val_losses = []
@@ -74,6 +169,10 @@ def train(
     os.makedirs(output_dir, exist_ok=True)
 
     for epoch in range(epochs):
+        if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs:
+            _unfreeze_backbone(model)
+            optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
+            print("Unfroze backbone for full fine-tuning.")
         model.train()
         running_loss = 0.0
         correct = 0
@@ -149,4 +248,4 @@ def train(
     }
 
 
-__all__ = ["train"]
+__all__ = ["train_fer2013"]
