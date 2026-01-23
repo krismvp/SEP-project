@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from pyexpat import model
 import sys
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -41,6 +42,12 @@ def ensure_outdir(out_dir: str) -> str:
 def load_model(weights_path: str, num_classes: int, in_channels: int, device: torch.device) -> torch.nn.Module:
     model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
     state = torch.load(weights_path, map_location=device)
+
+    # --- adapt 3-channel checkpoint to 1-channel model (grayscale) ---
+    if "conv1.weight" in state:
+        w = state["conv1.weight"]  # shape either [64,3,3,3] or [64,1,3,3]
+        if w.ndim == 4 and w.shape[1] == 3 and model.conv1.weight.shape[1] == 1:
+            state["conv1.weight"] = w.mean(dim=1, keepdim=True)  # -> [64,1,3,3]
     model.load_state_dict(state)
     model.eval()
     return model
