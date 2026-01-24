@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import datasets
 import matplotlib.pyplot as plt
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
@@ -25,7 +27,7 @@ def parse_args():
     ap.add_argument("--weights", required=True, help="Path to model weights (.pth)")
     ap.add_argument("--split", choices=["test", "val", "train"], default="test", help="Which split to evaluate")
     ap.add_argument("--batch-size", type=int, default=64)
-    ap.add_argument("--num-classes", type=int, default=7)
+    ap.add_argument("--num-classes", type=int, default=6)
     ap.add_argument("--in-channels", type=int, default=1)
     ap.add_argument("--num-workers", type=int, default=0)
     ap.add_argument("--out-dir", default="outputs/eval")
@@ -165,31 +167,32 @@ def per_class_accuracy(cm: List[List[int]]) -> List[float]:
 
 
 def save_confusion_matrix_png(cm: List[List[int]], class_names: List[str], out_path: str):
-    n = len(cm)
+    cm = np.array(cm, dtype=float)
+
+    # normalize rows (True labels)
+    row_sums = cm.sum(axis=1, keepdims=True)
+    cm = np.divide(cm, row_sums, out=np.zeros_like(cm), where=row_sums != 0)
+
+    n = len(class_names)
+    cm = cm[:n, :n]
+
     fig, ax = plt.subplots(figsize=(7, 6))
-    im = ax.imshow(cm)  # no custom colors per instruction; matplotlib default
+    im = ax.imshow(cm, cmap="Blues", vmin=0.0, vmax=1.0)
+
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label("")
 
     ax.set_xticks(range(n))
     ax.set_yticks(range(n))
-
-    # make sure labels match count
-    class_names = class_names[:n] + [str(i) for i in range(len(class_names), n)]
     ax.set_xticklabels(class_names, rotation=45, ha="right")
     ax.set_yticklabels(class_names)
 
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
-    ax.set_title("Confusion Matrix")
-
-    # annotate values
-    for i in range(n):
-        for j in range(n):
-            ax.text(j, i, str(cm[i][j]), ha="center", va="center", fontsize=8)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
-
 
 def save_metrics_json(metrics: dict, out_path: str):
     with open(out_path, "w", encoding="utf-8") as f:
@@ -235,6 +238,8 @@ def main():
         batch_size=args.batch_size,
         num_workers=args.num_workers,
     )
+
+    class_names = ["anger", "disgust", "fear", "happiness", "sadness", "surprise"]
 
     # Load model
     model = load_model(
