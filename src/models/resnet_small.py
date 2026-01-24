@@ -41,7 +41,12 @@ class ResNet18(nn.Module):
         self.layer4 = self._make_layer(BasicBlock, base_channels * 8, num_blocks=2, stride=2)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(base_channels * 8 * BasicBlock.expansion, num_classes)
+
+        # expose feature dimension for hybrid models
+        self.feature_dim = base_channels * 8 * BasicBlock.expansion
+
+        self.fc = nn.Linear(self.feature_dim, num_classes)
+
 
     def _make_layer(self, block, out_channels: int, num_blocks: int, stride: int):
         # First block may downsample (stride>1). Remaining blocks keep stride=1.
@@ -56,6 +61,14 @@ class ResNet18(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.forward_features(x)
+        out = self.avgpool(out)
+        out = torch.flatten(out, 1)
+        out = self.fc(out)
+        return out
+
+    
+    def forward_features(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -64,8 +77,5 @@ class ResNet18(nn.Module):
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
+        return out  # [B, C, H, W]
 
-        out = self.avgpool(out)
-        out = torch.flatten(out, 1)
-        out = self.fc(out)
-        return out
