@@ -1,8 +1,10 @@
 import os
-from typing import Optional, Dict
+from collections.abc import Sized
+from typing import Optional, Dict, List, cast
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
 from src.data.ferplus_data import make_ferplus_loaders
@@ -17,6 +19,80 @@ from src.training.train_fer2013 import (
     _load_pretrained_backbone,
     _unfreeze_backbone,
 )
+
+
+def _label_from_sample(sample: object) -> Optional[int]:
+    label = getattr(sample, "label", None)
+    if label is not None:
+        return int(label)
+    if isinstance(sample, (list, tuple)) and len(sample) > 1:
+        return int(sample[1])
+    return None
+
+
+def _extract_labels(dataset: Dataset) -> List[int]:
+    if isinstance(dataset, Subset):
+        base = dataset.dataset
+        indices = list(dataset.indices)
+        samples = getattr(base, "samples", None)
+        if samples is not None:
+            labels = []
+            for idx in indices:
+                label = _label_from_sample(samples[idx])
+                if label is not None:
+                    labels.append(label)
+            return labels
+        targets = getattr(base, "targets", None)
+        if targets is not None:
+            return [int(targets[idx]) for idx in indices]
+        labels = []
+        for idx in indices:
+            label = _label_from_sample(base[idx])
+            if label is None:
+                raise ValueError("Dataset samples must provide labels.")
+            labels.append(label)
+        return labels
+    samples = getattr(dataset, "samples", None)
+    if samples is not None:
+        labels = []
+        for sample in samples:
+            label = _label_from_sample(sample)
+            if label is not None:
+                labels.append(label)
+        return labels
+    targets = getattr(dataset, "targets", None)
+    if targets is not None:
+        return [int(t) for t in targets]
+    if not isinstance(dataset, Sized):
+        raise ValueError("Dataset must implement __len__ for label extraction.")
+    sized_dataset = cast(Sized, dataset)
+    labels = []
+    for idx in range(len(sized_dataset)):
+        label = _label_from_sample(dataset[idx])
+        if label is None:
+            raise ValueError("Dataset samples must provide labels.")
+        labels.append(label)
+    return labels
+
+
+def _compute_class_weights(
+    labels: List[int], num_classes: int, power: float = 1.0
+) -> torch.Tensor:
+    counts = torch.bincount(torch.tensor(labels, dtype=torch.long), minlength=num_classes)
+    counts = counts.float().clamp_min(1.0)
+    weights = counts.sum() / (num_classes * counts)
+    if power != 1.0:
+        weights = weights.pow(power)
+    return weights
+
+
+def _get_class_names(dataset, num_classes: int) -> list[str]:
+    if hasattr(dataset, "dataset"):
+        dataset = dataset.dataset
+    classes = getattr(dataset, "classes", None)
+    if classes:
+        return list(classes)
+    return [str(i) for i in range(num_classes)]
 
 
 def train_ferplus(
@@ -36,6 +112,14 @@ def train_ferplus(
     backbone_lr: Optional[float] = None,
     head_lr: Optional[float] = None,
     weight_decay: float = 0.0,
+    drop_neutral: bool = False,
+    drop_contempt: bool = False,
+    confusion_matrix: bool = False,
+    use_weighted_loss: bool = True,
+    use_weighted_sampler: bool = False,
+    class_weight_power: float = 0.5,
+    label_smoothing: float = 0.0,
+    augmentation: str = "basic",
 ):
     set_seed(seed)
     device = get_device()
@@ -49,15 +133,49 @@ def train_ferplus(
         num_workers=num_workers,
         num_channels=num_channels or 1,
         image_size=image_size,
+        drop_neutral=drop_neutral,
+        drop_contempt=drop_contempt,
+        augmentation=augmentation,
     )
 
     num_classes = infer_num_classes(train_loader.dataset)
     in_channels = num_channels if num_channels is not None else infer_in_channels(train_loader.dataset)
+    class_names = _get_class_names(train_loader.dataset, num_classes)
 
     model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
-    criterion = nn.CrossEntropyLoss()
+
+    labels = _extract_labels(train_loader.dataset)
+    class_weights = None
+    if labels:
+        class_weights = _compute_class_weights(
+            labels, num_classes=num_classes, power=class_weight_power
+        )
+    if use_weighted_sampler and class_weights is not None:
+        sample_weights = [class_weights[label].item() for label in labels]
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True,
+        )
+        train_loader = DataLoader(
+            train_loader.dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+            drop_last=True,
+        )
+
+    if use_weighted_loss and class_weights is not None:
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights.to(device),
+            label_smoothing=label_smoothing,
+        )
+    else:
+        criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     head_lr = head_lr if head_lr is not None else lr
     if backbone_lr is None:
@@ -76,6 +194,7 @@ def train_ferplus(
     epochs_since_improve = 0
 
     os.makedirs(output_dir, exist_ok=True)
+    best_path = os.path.join(output_dir, "resnet18_best.pth")
 
     for epoch in range(epochs):
         if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs:
@@ -137,7 +256,7 @@ def train_ferplus(
             best_val_acc = val_acc
             best_epoch = epoch + 1
             epochs_since_improve = 0
-            torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_best.pth"))
+            torch.save(model.state_dict(), best_path)
         else:
             epochs_since_improve += 1
 
@@ -147,21 +266,37 @@ def train_ferplus(
 
     torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_last.pth"))
 
+    if test_loader is not None and os.path.exists(best_path):
+        model.load_state_dict(torch.load(best_path, map_location=device))
+        model.to(device)
+
+    test_loss = None
+    test_acc = None
+    cm = None
     if test_loader is not None:
-        test_loss = 0.0
+        running_test_loss = 0.0
         test_correct = 0
         test_total = 0
+        if confusion_matrix:
+            cm = torch.zeros((num_classes, num_classes), dtype=torch.int64)
         model.eval()
         with torch.no_grad():
             for imgs, labels in tqdm(test_loader, desc="Test"):
                 imgs, labels = imgs.to(device), labels.to(device)
                 outputs = model(imgs)
                 loss = criterion(outputs, labels)
-                test_loss += loss.item() * labels.size(0)
+                running_test_loss += loss.item() * labels.size(0)
                 preds = outputs.argmax(dim=1)
                 test_total += labels.size(0)
                 test_correct += (preds == labels).sum().item()
-        test_loss = test_loss / max(test_total, 1)
+                if cm is not None:
+                    labels_cpu = labels.detach().cpu()
+                    preds_cpu = preds.detach().cpu()
+                    indices = labels_cpu * num_classes + preds_cpu
+                    cm += torch.bincount(
+                        indices, minlength=num_classes * num_classes
+                    ).reshape(num_classes, num_classes)
+        test_loss = running_test_loss / max(test_total, 1)
         test_acc = 100 * test_correct / max(test_total, 1)
         print(f"Test Loss = {test_loss:.4f} | Test Acc = {test_acc:.2f}%")
 
@@ -172,6 +307,10 @@ def train_ferplus(
         "val_accs": val_accs,
         "best_epoch": best_epoch,
         "best_val_acc": best_val_acc,
+        "class_names": class_names,
+        "test_loss": test_loss,
+        "test_acc": test_acc,
+        "confusion_matrix": cm.tolist() if isinstance(cm, torch.Tensor) else None,
     }
 
 
