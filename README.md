@@ -33,6 +33,7 @@ data/ferplus/
       <class_name>/*.png
 ```
 If no `val/` folder exists, a random split is used.
+Use `--drop-neutral` and/or `--drop-contempt` to reduce to 6 or 7 classes.
 
 RAF-DB (CSV + images):
 ```
@@ -107,6 +108,11 @@ python scripts/train_ferplus.py \
   --pretrained-path outputs/pretrained_backbone.pth \
   --freeze-epochs 5
 ```
+Use `--confusion-matrix` to save a test-set confusion matrix in the output dir.
+For class imbalance, try `--no-weighted-loss` to disable weights or
+`--class-weight-power 0.5` to soften them. Use `--weighted-sampler` to oversample
+minority classes.
+Use `--augmentation strong` for stronger FER-style training augmentations.
 
 ## Outputs
 

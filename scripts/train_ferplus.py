@@ -32,6 +32,14 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--num-channels", type=int, default=None)
     parser.add_argument("--image-size", type=int, default=64)
+    parser.add_argument("--drop-neutral", action="store_true")
+    parser.add_argument("--drop-contempt", action="store_true")
+    parser.add_argument("--confusion-matrix", action="store_true")
+    parser.add_argument("--weighted-sampler", action="store_true")
+    parser.add_argument("--no-weighted-loss", action="store_true")
+    parser.add_argument("--class-weight-power", type=float, default=0.5)
+    parser.add_argument("--label-smoothing", type=float, default=0.0)
+    parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
     args = parser.parse_args()
 
     num_channels = args.num_channels
@@ -55,6 +63,14 @@ def main() -> None:
         backbone_lr=args.backbone_lr,
         head_lr=args.head_lr,
         weight_decay=args.weight_decay,
+        drop_neutral=args.drop_neutral,
+        drop_contempt=args.drop_contempt,
+        confusion_matrix=args.confusion_matrix,
+        use_weighted_loss=not args.no_weighted_loss,
+        use_weighted_sampler=args.weighted_sampler,
+        class_weight_power=args.class_weight_power,
+        label_smoothing=args.label_smoothing,
+        augmentation=args.augmentation,
     )
 
     epochs_ran = len(history["train_losses"])
@@ -78,6 +94,55 @@ def main() -> None:
     plot_path = os.path.join(args.output_dir, "training_curves.png")
     fig.savefig(plot_path, dpi=150)
     plt.close(fig)
+
+    cm = history.get("confusion_matrix")
+    if args.confusion_matrix and cm is not None:
+        import numpy as np
+
+        cm_array = np.array(cm, dtype=int)
+        class_names = history.get("class_names") or [str(i) for i in range(cm_array.shape[0])]
+        fig_cm, ax_cm = plt.subplots(figsize=(6, 5))
+        im = ax_cm.imshow(cm_array, cmap="Blues")
+        ax_cm.set_xlabel("Predicted")
+        ax_cm.set_ylabel("True")
+        ax_cm.set_xticks(range(len(class_names)))
+        ax_cm.set_yticks(range(len(class_names)))
+        ax_cm.set_xticklabels(class_names, rotation=45, ha="right")
+        ax_cm.set_yticklabels(class_names)
+        fig_cm.colorbar(im, ax=ax_cm, fraction=0.046, pad=0.04)
+        fig_cm.tight_layout()
+        cm_path = os.path.join(args.output_dir, "confusion_matrix.png")
+        cm_norm_path = os.path.join(args.output_dir, "confusion_matrix_normalized.png")
+        fig_cm.savefig(cm_path, dpi=150)
+        plt.close(fig_cm)
+
+        csv_path = os.path.join(args.output_dir, "confusion_matrix.csv")
+        csv_norm_path = os.path.join(args.output_dir, "confusion_matrix_normalized.csv")
+        np.savetxt(csv_path, cm_array, delimiter=",", fmt="%d")
+
+        row_sums = cm_array.sum(axis=1, keepdims=True)
+        cm_norm = np.divide(
+            cm_array.astype(float),
+            row_sums,
+            out=np.zeros_like(cm_array, dtype=float),
+            where=row_sums > 0,
+        )
+        fig_norm, ax_norm = plt.subplots(figsize=(6, 5))
+        im_norm = ax_norm.imshow(cm_norm, cmap="Blues", vmin=0.0, vmax=1.0)
+        ax_norm.set_xlabel("Predicted")
+        ax_norm.set_ylabel("True")
+        ax_norm.set_xticks(range(len(class_names)))
+        ax_norm.set_yticks(range(len(class_names)))
+        ax_norm.set_xticklabels(class_names, rotation=45, ha="right")
+        ax_norm.set_yticklabels(class_names)
+        fig_norm.colorbar(im_norm, ax=ax_norm, fraction=0.046, pad=0.04)
+        fig_norm.tight_layout()
+        fig_norm.savefig(cm_norm_path, dpi=150)
+        plt.close(fig_norm)
+
+        np.savetxt(csv_norm_path, cm_norm * 100.0, delimiter=",", fmt="%.2f")
+        print(f"Saved confusion matrix to: {cm_path}")
+        print(f"Saved normalized confusion matrix to: {cm_norm_path}")
 
     print(f"Best epoch by val accuracy: {history['best_epoch']}")
     print(f"Saved plots to: {plot_path}")

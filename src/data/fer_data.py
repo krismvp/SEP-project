@@ -13,6 +13,7 @@ def make_fer_loaders(
     num_workers=4,
     num_channels=1,
     image_size=64,
+    augmentation="basic",
 ):
     train_root = f"{data_path}/train"
     val_root = f"{data_path}/val"
@@ -20,7 +21,9 @@ def make_fer_loaders(
     if os.path.isdir(val_root):
         train_dataset = datasets.ImageFolder(
             root=train_root,
-            transform=fer_train_transforms(num_channels=num_channels, image_size=image_size),
+            transform=fer_train_transforms(
+                num_channels=num_channels, image_size=image_size, augmentation=augmentation
+            ),
         )
         val_dataset = datasets.ImageFolder(
             root=val_root,
@@ -39,7 +42,9 @@ def make_fer_loaders(
 
         train_dataset = datasets.ImageFolder(
             root=train_root,
-            transform=fer_train_transforms(num_channels=num_channels, image_size=image_size),
+            transform=fer_train_transforms(
+                num_channels=num_channels, image_size=image_size, augmentation=augmentation
+            ),
         )
         val_dataset = datasets.ImageFolder(
             root=train_root,

@@ -127,6 +127,7 @@ def train_fer2013(
     backbone_lr: Optional[float] = None,
     head_lr: Optional[float] = None,
     weight_decay: float = 0.0,
+    augmentation: str = "basic",
 ):
     set_seed(seed)
     device = get_device()
@@ -140,6 +141,7 @@ def train_fer2013(
         num_workers=num_workers,
         num_channels=num_channels or 1,
         image_size=image_size,
+        augmentation=augmentation,
     )
 
     num_classes = infer_num_classes(train_loader.dataset)

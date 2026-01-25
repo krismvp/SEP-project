@@ -33,6 +33,7 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--num-channels", type=int, default=None)
     parser.add_argument("--image-size", type=int, default=64)
+    parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
     args = parser.parse_args()
 
     num_channels = args.num_channels
@@ -56,6 +57,7 @@ def main() -> None:
         backbone_lr=args.backbone_lr,
         head_lr=args.head_lr,
         weight_decay=args.weight_decay,
+        augmentation=args.augmentation,
     )
 
     epochs_ran = len(history["train_losses"])
