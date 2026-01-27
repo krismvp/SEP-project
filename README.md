@@ -127,3 +127,4 @@ Use `--output-dir` to avoid overwriting previous runs.
 
 - `pillow` is required for image loading.
 - `gdown` is only needed if you want torchvision to download CelebA automatically.
+- All experiments use grayscale 1-channel inputs for cross-dataset consistency; RGB datasets are converted to grayscale at preprocessing time.
