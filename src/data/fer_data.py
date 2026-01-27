@@ -11,7 +11,6 @@ def make_fer_loaders(
     val_split=0.1,
     seed=42,
     num_workers=4,
-    num_channels=1,
     image_size=64,
     augmentation="basic",
 ):
@@ -22,12 +21,12 @@ def make_fer_loaders(
         train_dataset = datasets.ImageFolder(
             root=train_root,
             transform=fer_train_transforms(
-                num_channels=num_channels, image_size=image_size, augmentation=augmentation
+                image_size=image_size, augmentation=augmentation
             ),
         )
         val_dataset = datasets.ImageFolder(
             root=val_root,
-            transform=fer_eval_transforms(num_channels=num_channels, image_size=image_size),
+            transform=fer_eval_transforms(image_size=image_size),
         )
     else:
         base_dataset = datasets.ImageFolder(root=train_root)
@@ -43,12 +42,12 @@ def make_fer_loaders(
         train_dataset = datasets.ImageFolder(
             root=train_root,
             transform=fer_train_transforms(
-                num_channels=num_channels, image_size=image_size, augmentation=augmentation
+                image_size=image_size, augmentation=augmentation
             ),
         )
         val_dataset = datasets.ImageFolder(
             root=train_root,
-            transform=fer_eval_transforms(num_channels=num_channels, image_size=image_size),
+            transform=fer_eval_transforms(image_size=image_size),
         )
 
         train_dataset = Subset(train_dataset, train_split.indices)

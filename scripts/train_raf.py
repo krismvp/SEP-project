@@ -36,7 +36,6 @@ def main() -> None:
     parser.add_argument("--train-csv", type=str, default=None)
     parser.add_argument("--test-csv", type=str, default=None)
     parser.add_argument("--image-dir", type=str, default=None)
-    parser.add_argument("--include-neutral", action="store_true")
     parser.add_argument("--weighted-sampler", action="store_true")
     parser.add_argument("--no-weighted-loss", action="store_true")
     parser.add_argument("--class-weight-power", type=float, default=0.5)
@@ -62,12 +61,14 @@ def main() -> None:
         train_csv=args.train_csv,
         test_csv=args.test_csv,
         image_dir=args.image_dir,
-        drop_neutral=not args.include_neutral,
         use_weighted_loss=not args.no_weighted_loss,
         use_weighted_sampler=args.weighted_sampler,
         class_weight_power=args.class_weight_power,
         label_smoothing=args.label_smoothing,
     )
+    class_order = history.get("class_order") or []
+    if class_order:
+        print(f"Class order: {class_order}")
 
     epochs_ran = len(history["train_losses"])
     if epochs_ran == 0:

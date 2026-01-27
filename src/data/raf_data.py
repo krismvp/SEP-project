@@ -10,12 +10,24 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 
 from .transforms import raf_eval_transforms, raf_train_transforms
+from src.constants.emotions import CANON_6, CLASS_TO_IDX, normalize_emotion
 
 
 @dataclass
 class RAFSample:
     path: Path
     label: int
+
+
+RAF_LABEL_TO_NAME = {
+    1: "surprise",
+    2: "fear",
+    3: "disgust",
+    4: "happiness",
+    5: "sadness",
+    6: "anger",
+    7: "neutral",
+}
 
 
 class RAFDBCsvDataset(Dataset):
@@ -27,8 +39,6 @@ class RAFDBCsvDataset(Dataset):
         image_dir: Path,
         transform=None,
         allow_empty: bool = False,
-        drop_neutral: bool = False,
-        neutral_label: int = 6,
     ):
         self.csv_path = csv_path
         self.image_dir = image_dir
@@ -36,9 +46,13 @@ class RAFDBCsvDataset(Dataset):
         self.samples = _load_csv_samples(self.csv_path, self.image_dir)
         if not self.samples and not allow_empty:
             raise FileNotFoundError(f"No RAF-DB samples found in {csv_path}.")
-        self.samples, self.num_classes = _normalize_samples(
-            self.samples, drop_neutral=drop_neutral, neutral_label=neutral_label
-        )
+        self.samples, self.num_classes, stats = _normalize_samples(self.samples)
+        if stats["fallback_used"] > 0:
+            print(
+                f"Warning: RAF label_id+1 fallback used for {stats['fallback_used']} samples. "
+                "Check label integrity."
+            )
+        self.classes = list(CANON_6)
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -61,7 +75,6 @@ def make_raf_loaders(
     train_csv: Optional[str] = None,
     test_csv: Optional[str] = None,
     image_dir: Optional[str] = None,
-    drop_neutral: bool = False,
 ) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader], int]:
     root = Path(data_dir)
     train_transform = raf_train_transforms(image_size=image_size)
@@ -74,7 +87,6 @@ def make_raf_loaders(
             csv_path=train_csv_path,
             image_dir=train_image_dir,
             transform=train_transform,
-            drop_neutral=drop_neutral,
         )
         num_classes = _infer_num_classes(train_base)
 
@@ -83,7 +95,6 @@ def make_raf_loaders(
                 csv_path=train_csv_path,
                 image_dir=train_image_dir,
                 transform=eval_transform,
-                drop_neutral=drop_neutral,
             )
             train_idx, val_idx = _split_indices(len(train_base), val_split, seed)
             train_dataset = Subset(train_base, train_idx)
@@ -107,7 +118,6 @@ def make_raf_loaders(
                     image_dir=test_image_dir,
                     transform=eval_transform,
                     allow_empty=True,
-                    drop_neutral=drop_neutral,
                 )
                 if len(test_dataset) == 0:
                     test_dataset = None
@@ -179,21 +189,27 @@ def _infer_num_classes(dataset: Dataset) -> int:
 
 def _normalize_samples(
     samples: List[RAFSample],
-    drop_neutral: bool,
-    neutral_label: int,
-) -> Tuple[List[RAFSample], int]:
+) -> Tuple[List[RAFSample], int, dict]:
     if not samples:
-        return samples, 0
-    labels = [s.label for s in samples]
-    offset = 1 if max(labels) > 6 else 0
+        return samples, 0, {"fallback_used": 0}
     normalized = []
+    fallback_used = 0
     for sample in samples:
-        label = sample.label - offset
-        if drop_neutral and label == neutral_label:
+        label_id = sample.label
+        name = RAF_LABEL_TO_NAME.get(label_id)
+        if name is None:
+            name = RAF_LABEL_TO_NAME.get(label_id + 1)
+            if name is not None:
+                fallback_used += 1
+        if name is None:
             continue
-        normalized.append(RAFSample(sample.path, label))
-    num_classes = len({s.label for s in normalized}) if normalized else 0
-    return normalized, num_classes
+        name = normalize_emotion(name)
+        if name == "neutral":
+            continue
+        if name not in CLASS_TO_IDX:
+            continue
+        normalized.append(RAFSample(sample.path, CLASS_TO_IDX[name]))
+    return normalized, len(CANON_6), {"fallback_used": fallback_used}
 
 
 def _find_csv_files(

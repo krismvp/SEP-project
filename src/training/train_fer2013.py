@@ -26,13 +26,6 @@ def infer_num_classes(dataset) -> int:
     raise ValueError("Unable to infer number of classes from dataset.")
 
 
-def infer_in_channels(dataset) -> int:
-    sample, _ = dataset[0]
-    if hasattr(sample, "shape"):
-        return sample.shape[0]
-    raise ValueError("Unable to infer input channels from dataset sample.")
-
-
 def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -45,6 +38,8 @@ def _load_pretrained_backbone(model: nn.Module, checkpoint_path: str) -> None:
         state = state["state_dict"]
     if not isinstance(state, dict):
         raise ValueError("Checkpoint must be a state_dict or contain a state_dict key.")
+    state.pop("fc.weight", None)
+    state.pop("fc.bias", None)
     conv1_weight = state.get("conv1.weight")
     if isinstance(conv1_weight, torch.Tensor):
         in_channels = _get_conv1_in_channels(model)
@@ -120,7 +115,6 @@ def train_fer2013(
     output_dir: str,
     patience: int,
     num_workers: int = 4,
-    num_channels: Optional[int] = None,
     image_size: int = 64,
     pretrained_path: Optional[str] = None,
     freeze_epochs: int = 0,
@@ -139,13 +133,12 @@ def train_fer2013(
         val_split=val_split,
         seed=seed,
         num_workers=num_workers,
-        num_channels=num_channels or 1,
         image_size=image_size,
         augmentation=augmentation,
     )
 
     num_classes = infer_num_classes(train_loader.dataset)
-    in_channels = num_channels if num_channels is not None else infer_in_channels(train_loader.dataset)
+    in_channels = 1
 
     model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
     if pretrained_path:
@@ -167,6 +160,7 @@ def train_fer2013(
     best_val_acc = -1.0
     best_epoch = 0
     epochs_since_improve = 0
+    printed_debug = False
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -181,6 +175,12 @@ def train_fer2013(
         total = 0
 
         for imgs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [train]"):
+            if not printed_debug:
+                print("conv1:", tuple(model.conv1.weight.shape))
+                print("batch:", tuple(imgs.shape))
+                print("batch_dtype:", imgs.dtype)
+                print("batch_range:", (float(imgs.min()), float(imgs.max())))
+                printed_debug = True
             imgs, labels = imgs.to(device), labels.to(device)
 
             optimizer.zero_grad()

@@ -31,14 +31,9 @@ def main() -> None:
     parser.add_argument("--backbone-lr", type=float, default=None)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--num-channels", type=int, default=None)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
     args = parser.parse_args()
-
-    num_channels = args.num_channels
-    if num_channels is None:
-        num_channels = 3 if args.pretrained_path else 1
 
     history = train_fer2013(
         data_path=args.data_path,
@@ -50,7 +45,6 @@ def main() -> None:
         output_dir=args.output_dir,
         patience=args.patience,
         num_workers=args.num_workers,
-        num_channels=num_channels,
         image_size=args.image_size,
         pretrained_path=args.pretrained_path,
         freeze_epochs=args.freeze_epochs,

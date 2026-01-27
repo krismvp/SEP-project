@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
+from src.constants.emotions import CANON_6
 from src.data.raf_data import make_raf_loaders
 from src.models.resnet_small import ResNet18
 from src.training.train_fer2013 import get_device, set_seed
@@ -14,6 +15,28 @@ from src.training.train_fer2013 import get_device, set_seed
 
 def _load_pretrained_backbone(model: nn.Module, checkpoint_path: str) -> None:
     state = torch.load(checkpoint_path, map_location="cpu")
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    if not isinstance(state, dict):
+        raise ValueError("Checkpoint must be a state_dict or contain a state_dict key.")
+    if any(k.startswith("module.") for k in state.keys()):
+        state = {k.replace("module.", "", 1): v for k, v in state.items()}
+
+    state.pop("fc.weight", None)
+    state.pop("fc.bias", None)
+
+    conv_key = "conv1.weight"
+    if conv_key in state:
+        weight = state[conv_key]
+        if isinstance(weight, torch.Tensor) and weight.ndim == 4:
+            in_ckpt = int(weight.shape[1])
+            in_model = int(model.conv1.weight.shape[1])
+            if in_ckpt != in_model:
+                if in_ckpt == 1 and in_model == 3:
+                    state[conv_key] = weight.repeat(1, 3, 1, 1) / 3.0
+                elif in_ckpt == 3 and in_model == 1:
+                    state[conv_key] = weight.mean(dim=1, keepdim=True)
+
     missing, unexpected = model.load_state_dict(state, strict=False)
     if unexpected:
         print(f"Unexpected keys in checkpoint: {unexpected}")
@@ -64,6 +87,7 @@ def _run_epoch(
     optimizer: Optional[torch.optim.Optimizer] = None,
     log_interval: int = 0,
     desc: str = "",
+    debug_state: Optional[dict] = None,
 ) -> Tuple[float, float]:
     if train:
         model.train()
@@ -79,6 +103,12 @@ def _run_epoch(
         if desc:
             iterator = tqdm(loader, desc=desc, leave=False)
             for step, (images, labels) in enumerate(iterator, start=1):
+                if debug_state is not None and not debug_state.get("printed", False):
+                    print("conv1:", tuple(model.conv1.weight.shape))
+                    print("batch:", tuple(images.shape))
+                    print("batch_dtype:", images.dtype)
+                    print("batch_range:", (float(images.min()), float(images.max())))
+                    debug_state["printed"] = True
                 images = images.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
 
@@ -101,6 +131,12 @@ def _run_epoch(
                     iterator.set_postfix(loss=f"{loss.item():.4f}", acc=f"{acc:.2f}%")
         else:
             for step, (images, labels) in enumerate(loader, start=1):
+                if debug_state is not None and not debug_state.get("printed", False):
+                    print("conv1:", tuple(model.conv1.weight.shape))
+                    print("batch:", tuple(images.shape))
+                    print("batch_dtype:", images.dtype)
+                    print("batch_range:", (float(images.min()), float(images.max())))
+                    debug_state["printed"] = True
                 images = images.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
 
@@ -213,7 +249,6 @@ def train_raf(
     train_csv: Optional[str] = None,
     test_csv: Optional[str] = None,
     image_dir: Optional[str] = None,
-    drop_neutral: bool = True,
     use_weighted_loss: bool = True,
     use_weighted_sampler: bool = False,
     class_weight_power: float = 0.5,
@@ -233,7 +268,6 @@ def train_raf(
         train_csv=train_csv,
         test_csv=test_csv,
         image_dir=image_dir,
-        drop_neutral=drop_neutral,
     )
     train_size = _safe_len(train_loader.dataset)
     val_size = _safe_len(val_loader.dataset) if val_loader is not None else 0
@@ -242,11 +276,12 @@ def train_raf(
         f"Train samples: {train_size} | Val samples: {val_size} | Test samples: {test_size}"
     )
 
-    model = ResNet18(num_classes=num_classes, in_channels=3).to(device)
+    model = ResNet18(num_classes=num_classes, in_channels=1).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
 
     labels = _extract_labels(train_loader.dataset)
+    class_order = list(CANON_6)
     class_weights = None
     if labels:
         class_weights = _compute_class_weights(
@@ -288,8 +323,10 @@ def train_raf(
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_val_acc = -1.0
+    best_val_loss = float("inf")
     best_epoch = 0
     epochs_since_improve = 0
+    min_delta = 1e-4
     os.makedirs(output_dir, exist_ok=True)
     best_path = os.path.join(output_dir, "resnet18_finetune_best.pth")
 
@@ -298,7 +335,9 @@ def train_raf(
         "val_losses": [],
         "train_accs": [],
         "val_accs": [],
+        "class_order": class_order,
     }
+    debug_state = {"printed": False}
 
     for epoch in range(1, epochs + 1):
         if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs + 1:
@@ -318,6 +357,7 @@ def train_raf(
             optimizer=optimizer,
             log_interval=log_interval,
             desc=f"Train {epoch}/{epochs}",
+            debug_state=debug_state,
         )
         history["train_losses"].append(train_loss)
         history["train_accs"].append(train_acc)
@@ -352,7 +392,8 @@ def train_raf(
             )
 
         if val_loader is not None:
-            if val_acc > best_val_acc:
+            if val_loss < best_val_loss - min_delta:
+                best_val_loss = val_loss
                 best_val_acc = val_acc
                 best_epoch = epoch
                 epochs_since_improve = 0
