@@ -11,7 +11,6 @@ from src.data.ferplus_data import make_ferplus_loaders
 from src.models.resnet_small import ResNet18
 from src.training.train_fer2013 import (
     get_device,
-    infer_in_channels,
     infer_num_classes,
     set_seed,
     _build_optimizer,
@@ -105,15 +104,12 @@ def train_ferplus(
     output_dir: str,
     patience: int,
     num_workers: int = 4,
-    num_channels: Optional[int] = None,
     image_size: int = 64,
     pretrained_path: Optional[str] = None,
     freeze_epochs: int = 0,
     backbone_lr: Optional[float] = None,
     head_lr: Optional[float] = None,
     weight_decay: float = 0.0,
-    drop_neutral: bool = False,
-    drop_contempt: bool = False,
     confusion_matrix: bool = False,
     use_weighted_loss: bool = True,
     use_weighted_sampler: bool = False,
@@ -131,15 +127,12 @@ def train_ferplus(
         val_split=val_split,
         seed=seed,
         num_workers=num_workers,
-        num_channels=num_channels or 1,
         image_size=image_size,
-        drop_neutral=drop_neutral,
-        drop_contempt=drop_contempt,
         augmentation=augmentation,
     )
 
     num_classes = infer_num_classes(train_loader.dataset)
-    in_channels = num_channels if num_channels is not None else infer_in_channels(train_loader.dataset)
+    in_channels = 1
     class_names = _get_class_names(train_loader.dataset, num_classes)
 
     model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
@@ -190,8 +183,11 @@ def train_ferplus(
     train_accs = []
     val_accs = []
     best_val_acc = -1.0
+    best_val_loss = float("inf")
     best_epoch = 0
     epochs_since_improve = 0
+    min_delta = 1e-4
+    printed_debug = False
 
     os.makedirs(output_dir, exist_ok=True)
     best_path = os.path.join(output_dir, "resnet18_best.pth")
@@ -207,6 +203,12 @@ def train_ferplus(
         total = 0
 
         for imgs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [train]"):
+            if not printed_debug:
+                print("conv1:", tuple(model.conv1.weight.shape))
+                print("batch:", tuple(imgs.shape))
+                print("batch_dtype:", imgs.dtype)
+                print("batch_range:", (float(imgs.min()), float(imgs.max())))
+                printed_debug = True
             imgs, labels = imgs.to(device), labels.to(device)
 
             optimizer.zero_grad()
@@ -252,7 +254,8 @@ def train_ferplus(
             f"Val Loss = {val_loss:.4f} | Val Acc = {val_acc:.2f}%"
         )
 
-        if val_acc > best_val_acc:
+        if val_loss < best_val_loss - min_delta:
+            best_val_loss = val_loss
             best_val_acc = val_acc
             best_epoch = epoch + 1
             epochs_since_improve = 0

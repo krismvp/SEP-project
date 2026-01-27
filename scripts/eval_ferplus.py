@@ -29,11 +29,12 @@ def _get_class_names(dataset, num_classes: int) -> list[str]:
     return [str(i) for i in range(num_classes)]
 
 
-def _infer_in_channels(state: dict, fallback: int) -> int:
+def _adapt_conv1_to_grayscale(state: dict) -> dict:
     weight = state.get("conv1.weight")
     if isinstance(weight, torch.Tensor) and weight.ndim == 4:
-        return int(weight.shape[1])
-    return fallback
+        if int(weight.shape[1]) == 3:
+            state["conv1.weight"] = weight.mean(dim=1, keepdim=True)
+    return state
 
 
 def main() -> None:
@@ -42,10 +43,9 @@ def main() -> None:
     parser.add_argument("--weights", required=True, help="Path to resnet18_best.pth")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--num-channels", type=int, default=None)
     parser.add_argument("--image-size", type=int, default=64)
-    parser.add_argument("--drop-neutral", action="store_true")
-    parser.add_argument("--drop-contempt", action="store_true")
+    parser.add_argument("--split", choices=["test", "val"], default="test")
+    parser.add_argument("--val-split", type=float, default=0.1)
     parser.add_argument("--output-dir", default="outputs/ferplus_eval")
     args = parser.parse_args()
 
@@ -57,23 +57,31 @@ def main() -> None:
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-    in_channels = _infer_in_channels(state, args.num_channels or 1)
+    state = _adapt_conv1_to_grayscale(state)
+    in_channels = 1
 
     _, _, test_loader = make_ferplus_loaders(
         data_dir=args.data_dir,
         batch_size=args.batch_size,
-        val_split=0.1,
+        val_split=args.val_split,
         seed=42,
         num_workers=args.num_workers,
-        num_channels=in_channels,
         image_size=args.image_size,
-        drop_neutral=args.drop_neutral,
-        drop_contempt=args.drop_contempt,
     )
-    if test_loader is None:
-        raise FileNotFoundError("FER+ test folder not found.")
+    _, val_loader, _ = make_ferplus_loaders(
+        data_dir=args.data_dir,
+        batch_size=args.batch_size,
+        val_split=args.val_split,
+        seed=42,
+        num_workers=args.num_workers,
+        image_size=args.image_size,
+    )
 
-    class_names = _get_class_names(test_loader.dataset, 0)
+    eval_loader = test_loader if args.split == "test" else val_loader
+    if eval_loader is None:
+        raise FileNotFoundError(f"FER+ {args.split} folder not found.")
+
+    class_names = _get_class_names(eval_loader.dataset, 0)
     num_classes = len(class_names)
     if num_classes == 0:
         fc_weight = state.get("fc.weight")
@@ -89,9 +97,17 @@ def main() -> None:
     cm = torch.zeros((num_classes, num_classes), dtype=torch.int64)
     correct = 0
     total = 0
+    printed_debug = False
 
     with torch.no_grad():
-        for imgs, labels in test_loader:
+        for imgs, labels in eval_loader:
+            if not printed_debug:
+                print("conv1:", tuple(model.conv1.weight.shape))
+                print("batch:", tuple(imgs.shape))
+                print("batch_dtype:", imgs.dtype)
+                print("batch_range:", (float(imgs.min()), float(imgs.max())))
+                print("class_names:", class_names)
+                printed_debug = True
             imgs, labels = imgs.to(device), labels.to(device)
             outputs = model(imgs)
             preds = outputs.argmax(dim=1)

@@ -30,10 +30,7 @@ def main() -> None:
     parser.add_argument("--backbone-lr", type=float, default=None)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--num-channels", type=int, default=None)
     parser.add_argument("--image-size", type=int, default=64)
-    parser.add_argument("--drop-neutral", action="store_true")
-    parser.add_argument("--drop-contempt", action="store_true")
     parser.add_argument("--confusion-matrix", action="store_true")
     parser.add_argument("--weighted-sampler", action="store_true")
     parser.add_argument("--no-weighted-loss", action="store_true")
@@ -41,10 +38,6 @@ def main() -> None:
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
     args = parser.parse_args()
-
-    num_channels = args.num_channels
-    if num_channels is None:
-        num_channels = 3 if args.pretrained_path else 1
 
     history = train_ferplus(
         data_dir=args.data_dir,
@@ -56,15 +49,12 @@ def main() -> None:
         output_dir=args.output_dir,
         patience=args.patience,
         num_workers=args.num_workers,
-        num_channels=num_channels,
         image_size=args.image_size,
         pretrained_path=args.pretrained_path,
         freeze_epochs=args.freeze_epochs,
         backbone_lr=args.backbone_lr,
         head_lr=args.head_lr,
         weight_decay=args.weight_decay,
-        drop_neutral=args.drop_neutral,
-        drop_contempt=args.drop_contempt,
         confusion_matrix=args.confusion_matrix,
         use_weighted_loss=not args.no_weighted_loss,
         use_weighted_sampler=args.weighted_sampler,
@@ -72,6 +62,9 @@ def main() -> None:
         label_smoothing=args.label_smoothing,
         augmentation=args.augmentation,
     )
+    class_names = history.get("class_names") or []
+    if class_names:
+        print(f"Class order: {class_names}")
 
     epochs_ran = len(history["train_losses"])
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))

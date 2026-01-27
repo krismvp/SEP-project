@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets
 
 from .transforms import fer_eval_transforms, fer_train_transforms
+from src.constants.emotions import CANON_6, CLASS_TO_IDX, normalize_emotion
 
 
 def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
@@ -33,31 +34,18 @@ def _resolve_ferplus_root(data_dir: str) -> Path:
     )
 
 
-class _FilteredImageFolder(Dataset):
-    def __init__(self, base: datasets.ImageFolder, keep_classes: list[str]):
+class _MappedImageFolder(Dataset):
+    def __init__(self, base: datasets.ImageFolder, samples: list[tuple[str, int]]):
         self.loader = base.loader
         self.transform = base.transform
         self.target_transform = base.target_transform
-        self.classes = list(keep_classes)
-        self.class_to_idx = {name: idx for idx, name in enumerate(self.classes)}
+        self.classes = list(CANON_6)
+        self.class_to_idx = CLASS_TO_IDX.copy()
 
-        keep_indices = {
-            base.class_to_idx[name]
-            for name in keep_classes
-            if name in base.class_to_idx
-        }
-        samples = []
-        targets = []
-        for path, target in base.samples:
-            if target in keep_indices:
-                class_name = base.classes[target]
-                new_target = self.class_to_idx[class_name]
-                samples.append((path, new_target))
-                targets.append(new_target)
         if not samples:
-            raise ValueError("No samples found after filtering FER+ classes.")
+            raise ValueError("No samples found after mapping FER+ classes.")
         self.samples = samples
-        self.targets = targets
+        self.targets = [target for _, target in samples]
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -72,20 +60,28 @@ class _FilteredImageFolder(Dataset):
         return sample, target
 
 
-def _filter_classes(
-    dataset: datasets.ImageFolder, drop_neutral: bool, drop_contempt: bool
-) -> Dataset:
-    drop = set()
-    if drop_neutral:
-        drop.add("neutral")
-    if drop_contempt:
-        drop.add("contempt")
-    if not drop:
+def _unwrap_subset(dataset: Dataset):
+    if isinstance(dataset, Subset):
+        return dataset.dataset, set(dataset.indices)
+    return dataset, None
+
+
+def _map_ferplus_to_canon(dataset: datasets.ImageFolder) -> Dataset:
+    base, indices = _unwrap_subset(dataset)
+    if not hasattr(base, "samples") or not hasattr(base, "classes"):
         return dataset
-    keep_classes = [name for name in dataset.classes if name.lower() not in drop]
-    if keep_classes == list(dataset.classes):
-        return dataset
-    return _FilteredImageFolder(dataset, keep_classes)
+    samples: list[tuple[str, int]] = []
+    for idx, (path, target) in enumerate(base.samples):
+        if indices is not None and idx not in indices:
+            continue
+        class_name = base.classes[target]
+        mapped = normalize_emotion(class_name)
+        if mapped in {"neutral", "contempt"}:
+            continue
+        if mapped not in CLASS_TO_IDX:
+            continue
+        samples.append((path, CLASS_TO_IDX[mapped]))
+    return _MappedImageFolder(base, samples)
 
 
 def _split_indices(num_samples: int, val_split: float, seed: int):
@@ -103,10 +99,7 @@ def make_ferplus_loaders(
     val_split: float = 0.1,
     seed: int = 42,
     num_workers: int = 4,
-    num_channels: int = 1,
     image_size: int = 64,
-    drop_neutral: bool = False,
-    drop_contempt: bool = False,
     augmentation: str = "basic",
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader]]:
     root = _resolve_ferplus_root(data_dir)
@@ -116,21 +109,19 @@ def make_ferplus_loaders(
     val_root = _find_split_dir(root, ["val", "Validation"])
     test_root = _find_split_dir(root, ["test", "Test"])
 
-    train_transform = fer_train_transforms(
-        num_channels=num_channels, image_size=image_size, augmentation=augmentation
-    )
-    eval_transform = fer_eval_transforms(num_channels=num_channels, image_size=image_size)
+    train_transform = fer_train_transforms(image_size=image_size, augmentation=augmentation)
+    eval_transform = fer_eval_transforms(image_size=image_size)
 
     if val_root is not None:
         train_dataset = datasets.ImageFolder(root=str(train_root), transform=train_transform)
-        train_dataset = _filter_classes(train_dataset, drop_neutral, drop_contempt)
+        train_dataset = _map_ferplus_to_canon(train_dataset)
         val_dataset = datasets.ImageFolder(root=str(val_root), transform=eval_transform)
-        val_dataset = _filter_classes(val_dataset, drop_neutral, drop_contempt)
+        val_dataset = _map_ferplus_to_canon(val_dataset)
     else:
         train_base = datasets.ImageFolder(root=str(train_root), transform=train_transform)
         eval_base = datasets.ImageFolder(root=str(train_root), transform=eval_transform)
-        train_base = _filter_classes(train_base, drop_neutral, drop_contempt)
-        eval_base = _filter_classes(eval_base, drop_neutral, drop_contempt)
+        train_base = _map_ferplus_to_canon(train_base)
+        eval_base = _map_ferplus_to_canon(eval_base)
         train_idx, val_idx = _split_indices(len(train_base), val_split, seed)
         train_dataset = Subset(train_base, train_idx)
         val_dataset = Subset(eval_base, val_idx) if val_idx else Subset(eval_base, [])
@@ -138,7 +129,7 @@ def make_ferplus_loaders(
     test_dataset = None
     if test_root is not None:
         test_dataset = datasets.ImageFolder(root=str(test_root), transform=eval_transform)
-        test_dataset = _filter_classes(test_dataset, drop_neutral, drop_contempt)
+        test_dataset = _map_ferplus_to_canon(test_dataset)
 
     train_loader = DataLoader(
         train_dataset,
