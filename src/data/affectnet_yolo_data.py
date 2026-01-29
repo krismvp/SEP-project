@@ -60,6 +60,9 @@ class AffectNetYoloDataset(Dataset):
         data_dir: str,
         split: str = "test",
         image_size: int = 64,
+        use_mtcnn: bool = False,
+        mtcnn_margin: float = 0.25,
+        mtcnn_device: str | None = None,
         transform=None,
     ):
         split_root = _resolve_split_dir(data_dir, split)
@@ -72,7 +75,12 @@ class AffectNetYoloDataset(Dataset):
 
         self.class_names = list(CANON_6)
         class_map = _build_class_mapping()
-        self.transform = transform or fer_eval_transforms(image_size=image_size)
+        self.transform = transform or fer_eval_transforms(
+            image_size=image_size,
+            use_mtcnn=use_mtcnn,
+            mtcnn_margin=mtcnn_margin,
+            mtcnn_device=mtcnn_device,
+        )
 
         image_map: Dict[str, Path] = {}
         for img_path in image_dir.iterdir():
@@ -140,11 +148,17 @@ def make_affectnet_yolo_loader(
     batch_size: int = 64,
     num_workers: int = 4,
     image_size: int = 64,
+    use_mtcnn: bool = False,
+    mtcnn_margin: float = 0.25,
+    mtcnn_device: str | None = None,
 ) -> Tuple[AffectNetYoloDataset, DataLoader]:
     dataset = AffectNetYoloDataset(
         data_dir=data_dir,
         split=split,
         image_size=image_size,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
     )
     loader = DataLoader(
         dataset,

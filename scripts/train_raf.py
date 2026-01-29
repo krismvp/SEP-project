@@ -40,7 +40,16 @@ def main() -> None:
     parser.add_argument("--no-weighted-loss", action="store_true")
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--label-smoothing", type=float, default=0.05)
+    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
+    parser.add_argument("--use-mtcnn", action="store_true")
+    parser.add_argument("--mtcnn-margin", type=float, default=0.25)
+    parser.add_argument("--mtcnn-device", type=str, default="cpu")
     args = parser.parse_args()
+
+    if args.use_mtcnn:
+        print(
+            f"MTCNN: enabled=True (margin={args.mtcnn_margin}, device={args.mtcnn_device})"
+        )
 
     history = train_raf(
         data_dir=args.data_dir,
@@ -65,6 +74,10 @@ def main() -> None:
         use_weighted_sampler=args.weighted_sampler,
         class_weight_power=args.class_weight_power,
         label_smoothing=args.label_smoothing,
+        arch=args.arch,
+        use_mtcnn=args.use_mtcnn,
+        mtcnn_margin=args.mtcnn_margin,
+        mtcnn_device=args.mtcnn_device,
     )
     class_order = history.get("class_order") or []
     if class_order:

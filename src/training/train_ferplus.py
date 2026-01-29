@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
 from src.data.ferplus_data import make_ferplus_loaders
-from src.models.resnet_small import ResNet18
+from src.models.factory import build_model
 from src.training.train_fer2013 import (
     get_device,
     infer_num_classes,
@@ -116,6 +116,10 @@ def train_ferplus(
     class_weight_power: float = 0.5,
     label_smoothing: float = 0.0,
     augmentation: str = "basic",
+    arch: str = "resnet18",
+    use_mtcnn: bool = False,
+    mtcnn_margin: float = 0.25,
+    mtcnn_device: str | None = None,
 ):
     set_seed(seed)
     device = get_device()
@@ -129,13 +133,20 @@ def train_ferplus(
         num_workers=num_workers,
         image_size=image_size,
         augmentation=augmentation,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
     )
+    train_size = len(train_loader.dataset)
+    val_size = len(val_loader.dataset) if val_loader is not None else 0
+    test_size = len(test_loader.dataset) if test_loader is not None else 0
+    print(f"FER+ samples - Train: {train_size} | Val: {val_size} | Test: {test_size}")
 
     num_classes = infer_num_classes(train_loader.dataset)
     in_channels = 1
     class_names = _get_class_names(train_loader.dataset, num_classes)
 
-    model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
+    model = build_model(arch, num_classes=num_classes, in_channels=in_channels).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
 
@@ -190,7 +201,7 @@ def train_ferplus(
     printed_debug = False
 
     os.makedirs(output_dir, exist_ok=True)
-    best_path = os.path.join(output_dir, "resnet18_best.pth")
+    best_path = os.path.join(output_dir, f"{arch}_best.pth")
 
     for epoch in range(epochs):
         if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs:
@@ -267,7 +278,7 @@ def train_ferplus(
             print(f"Early stopping at epoch {epoch+1}. Best epoch: {best_epoch}")
             break
 
-    torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_last.pth"))
+    torch.save(model.state_dict(), os.path.join(output_dir, f"{arch}_last.pth"))
 
     if test_loader is not None and os.path.exists(best_path):
         model.load_state_dict(torch.load(best_path, map_location=device))

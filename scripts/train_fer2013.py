@@ -33,6 +33,7 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
+    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
     args = parser.parse_args()
 
     history = train_fer2013(
@@ -46,6 +47,7 @@ def main() -> None:
         patience=args.patience,
         num_workers=args.num_workers,
         image_size=args.image_size,
+        arch=args.arch,
         pretrained_path=args.pretrained_path,
         freeze_epochs=args.freeze_epochs,
         backbone_lr=args.backbone_lr,

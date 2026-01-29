@@ -37,7 +37,16 @@ def main() -> None:
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--augmentation", choices=["basic", "strong"], default="basic")
+    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
+    parser.add_argument("--use-mtcnn", action="store_true")
+    parser.add_argument("--mtcnn-margin", type=float, default=0.25)
+    parser.add_argument("--mtcnn-device", type=str, default="cpu")
     args = parser.parse_args()
+
+    if args.use_mtcnn:
+        print(
+            f"MTCNN: enabled=True (margin={args.mtcnn_margin}, device={args.mtcnn_device})"
+        )
 
     history = train_ferplus(
         data_dir=args.data_dir,
@@ -61,6 +70,10 @@ def main() -> None:
         class_weight_power=args.class_weight_power,
         label_smoothing=args.label_smoothing,
         augmentation=args.augmentation,
+        arch=args.arch,
+        use_mtcnn=args.use_mtcnn,
+        mtcnn_margin=args.mtcnn_margin,
+        mtcnn_device=args.mtcnn_device,
     )
     class_names = history.get("class_names") or []
     if class_names:
@@ -93,6 +106,12 @@ def main() -> None:
         import numpy as np
 
         cm_array = np.array(cm, dtype=int)
+        test_acc = history.get("test_acc")
+        if isinstance(test_acc, (int, float)):
+            acc_text = f"{test_acc:.2f}%"
+        else:
+            acc_text = "N/A"
+        title_base = f"FER+ Test Acc: {acc_text}"
         class_names = history.get("class_names") or [str(i) for i in range(cm_array.shape[0])]
         fig_cm, ax_cm = plt.subplots(figsize=(6, 5))
         im = ax_cm.imshow(cm_array, cmap="Blues")
@@ -102,6 +121,7 @@ def main() -> None:
         ax_cm.set_yticks(range(len(class_names)))
         ax_cm.set_xticklabels(class_names, rotation=45, ha="right")
         ax_cm.set_yticklabels(class_names)
+        ax_cm.set_title(title_base)
         fig_cm.colorbar(im, ax=ax_cm, fraction=0.046, pad=0.04)
         fig_cm.tight_layout()
         cm_path = os.path.join(args.output_dir, "confusion_matrix.png")
@@ -128,6 +148,7 @@ def main() -> None:
         ax_norm.set_yticks(range(len(class_names)))
         ax_norm.set_xticklabels(class_names, rotation=45, ha="right")
         ax_norm.set_yticklabels(class_names)
+        ax_norm.set_title(f"{title_base} (Normalized)")
         fig_norm.colorbar(im_norm, ax=ax_norm, fraction=0.046, pad=0.04)
         fig_norm.tight_layout()
         fig_norm.savefig(cm_norm_path, dpi=150)

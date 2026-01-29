@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from src.data.ferplus_data import make_ferplus_loaders
-from src.models.resnet_small import ResNet18
+from src.models.factory import build_model
 
 
 def _unwrap_dataset(dataset):
@@ -40,14 +40,23 @@ def _adapt_conv1_to_grayscale(state: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate FER+ model on test set.")
     parser.add_argument("--data-dir", default="data/ferplus")
-    parser.add_argument("--weights", required=True, help="Path to resnet18_best.pth")
+    parser.add_argument("--weights", required=True, help="Path to checkpoint .pth")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--image-size", type=int, default=64)
+    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
     parser.add_argument("--split", choices=["test", "val"], default="test")
     parser.add_argument("--val-split", type=float, default=0.1)
     parser.add_argument("--output-dir", default="outputs/ferplus_eval")
+    parser.add_argument("--use-mtcnn", action="store_true")
+    parser.add_argument("--mtcnn-margin", type=float, default=0.25)
+    parser.add_argument("--mtcnn-device", type=str, default="cpu")
     args = parser.parse_args()
+
+    if args.use_mtcnn:
+        print(
+            f"MTCNN: enabled=True (margin={args.mtcnn_margin}, device={args.mtcnn_device})"
+        )
 
     state = torch.load(args.weights, map_location="cpu")
     if isinstance(state, dict) and "state_dict" in state:
@@ -67,6 +76,9 @@ def main() -> None:
         seed=42,
         num_workers=args.num_workers,
         image_size=args.image_size,
+        use_mtcnn=args.use_mtcnn,
+        mtcnn_margin=args.mtcnn_margin,
+        mtcnn_device=args.mtcnn_device,
     )
     _, val_loader, _ = make_ferplus_loaders(
         data_dir=args.data_dir,
@@ -75,6 +87,9 @@ def main() -> None:
         seed=42,
         num_workers=args.num_workers,
         image_size=args.image_size,
+        use_mtcnn=args.use_mtcnn,
+        mtcnn_margin=args.mtcnn_margin,
+        mtcnn_device=args.mtcnn_device,
     )
 
     eval_loader = test_loader if args.split == "test" else val_loader
@@ -90,7 +105,7 @@ def main() -> None:
             class_names = [str(i) for i in range(num_classes)]
         else:
             raise ValueError("Unable to infer number of classes for evaluation.")
-    model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
+    model = build_model(args.arch, num_classes=num_classes, in_channels=in_channels).to(device)
     model.load_state_dict(state)
     model.eval()
 
@@ -122,6 +137,7 @@ def main() -> None:
 
     acc = 100 * correct / max(total, 1)
     print(f"Test Acc: {acc:.2f}%")
+    title_base = f"FER+ {args.split} Acc: {acc:.2f}%"
 
     cm_array = cm.numpy()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -138,6 +154,7 @@ def main() -> None:
     ax.set_yticks(range(len(class_names)))
     ax.set_xticklabels(class_names, rotation=45, ha="right")
     ax.set_yticklabels(class_names)
+    ax.set_title(title_base)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
     fig.savefig(cm_path, dpi=150)
@@ -160,6 +177,7 @@ def main() -> None:
     ax_norm.set_yticks(range(len(class_names)))
     ax_norm.set_xticklabels(class_names, rotation=45, ha="right")
     ax_norm.set_yticklabels(class_names)
+    ax_norm.set_title(f"{title_base} (Normalized)")
     fig_norm.colorbar(im_norm, ax=ax_norm, fraction=0.046, pad=0.04)
     fig_norm.tight_layout()
     fig_norm.savefig(cm_norm_path, dpi=150)

@@ -101,6 +101,9 @@ def make_ferplus_loaders(
     num_workers: int = 4,
     image_size: int = 64,
     augmentation: str = "basic",
+    use_mtcnn: bool = False,
+    mtcnn_margin: float = 0.25,
+    mtcnn_device: str | None = None,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader]]:
     root = _resolve_ferplus_root(data_dir)
     train_root = _find_split_dir(root, ["train", "Training"])
@@ -109,8 +112,19 @@ def make_ferplus_loaders(
     val_root = _find_split_dir(root, ["val", "Validation"])
     test_root = _find_split_dir(root, ["test", "Test"])
 
-    train_transform = fer_train_transforms(image_size=image_size, augmentation=augmentation)
-    eval_transform = fer_eval_transforms(image_size=image_size)
+    train_transform = fer_train_transforms(
+        image_size=image_size,
+        augmentation=augmentation,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
+    )
+    eval_transform = fer_eval_transforms(
+        image_size=image_size,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
+    )
 
     if val_root is not None:
         train_dataset = datasets.ImageFolder(root=str(train_root), transform=train_transform)

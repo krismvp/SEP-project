@@ -75,10 +75,23 @@ def make_raf_loaders(
     train_csv: Optional[str] = None,
     test_csv: Optional[str] = None,
     image_dir: Optional[str] = None,
+    use_mtcnn: bool = False,
+    mtcnn_margin: float = 0.25,
+    mtcnn_device: str | None = None,
 ) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader], int]:
     root = Path(data_dir)
-    train_transform = raf_train_transforms(image_size=image_size)
-    eval_transform = raf_eval_transforms(image_size=image_size)
+    train_transform = raf_train_transforms(
+        image_size=image_size,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
+    )
+    eval_transform = raf_eval_transforms(
+        image_size=image_size,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
+    )
 
     train_csv_path, test_csv_path = _find_csv_files(root, train_csv, test_csv)
     if train_csv_path is not None:

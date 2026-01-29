@@ -13,6 +13,9 @@ def make_fer_loaders(
     num_workers=4,
     image_size=64,
     augmentation="basic",
+    use_mtcnn=False,
+    mtcnn_margin=0.25,
+    mtcnn_device=None,
 ):
     train_root = f"{data_path}/train"
     val_root = f"{data_path}/val"
@@ -21,12 +24,21 @@ def make_fer_loaders(
         train_dataset = datasets.ImageFolder(
             root=train_root,
             transform=fer_train_transforms(
-                image_size=image_size, augmentation=augmentation
+                image_size=image_size,
+                augmentation=augmentation,
+                use_mtcnn=use_mtcnn,
+                mtcnn_margin=mtcnn_margin,
+                mtcnn_device=mtcnn_device,
             ),
         )
         val_dataset = datasets.ImageFolder(
             root=val_root,
-            transform=fer_eval_transforms(image_size=image_size),
+            transform=fer_eval_transforms(
+                image_size=image_size,
+                use_mtcnn=use_mtcnn,
+                mtcnn_margin=mtcnn_margin,
+                mtcnn_device=mtcnn_device,
+            ),
         )
     else:
         base_dataset = datasets.ImageFolder(root=train_root)
@@ -42,12 +54,21 @@ def make_fer_loaders(
         train_dataset = datasets.ImageFolder(
             root=train_root,
             transform=fer_train_transforms(
-                image_size=image_size, augmentation=augmentation
+                image_size=image_size,
+                augmentation=augmentation,
+                use_mtcnn=use_mtcnn,
+                mtcnn_margin=mtcnn_margin,
+                mtcnn_device=mtcnn_device,
             ),
         )
         val_dataset = datasets.ImageFolder(
             root=train_root,
-            transform=fer_eval_transforms(image_size=image_size),
+            transform=fer_eval_transforms(
+                image_size=image_size,
+                use_mtcnn=use_mtcnn,
+                mtcnn_margin=mtcnn_margin,
+                mtcnn_device=mtcnn_device,
+            ),
         )
 
         train_dataset = Subset(train_dataset, train_split.indices)

@@ -7,7 +7,7 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from src.data.fer_data import make_fer_loaders
-from src.models.resnet_small import ResNet18
+from src.models.factory import build_model
 
 
 def get_device() -> torch.device:
@@ -116,6 +116,7 @@ def train_fer2013(
     patience: int,
     num_workers: int = 4,
     image_size: int = 64,
+    arch: str = "resnet18",
     pretrained_path: Optional[str] = None,
     freeze_epochs: int = 0,
     backbone_lr: Optional[float] = None,
@@ -140,7 +141,7 @@ def train_fer2013(
     num_classes = infer_num_classes(train_loader.dataset)
     in_channels = 1
 
-    model = ResNet18(num_classes=num_classes, in_channels=in_channels).to(device)
+    model = build_model(arch, num_classes=num_classes, in_channels=in_channels).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
     criterion = nn.CrossEntropyLoss()
@@ -230,7 +231,7 @@ def train_fer2013(
             best_val_acc = val_acc
             best_epoch = epoch + 1
             epochs_since_improve = 0
-            torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_best.pth"))
+            torch.save(model.state_dict(), os.path.join(output_dir, f"{arch}_best.pth"))
         else:
             epochs_since_improve += 1
 
@@ -238,7 +239,7 @@ def train_fer2013(
             print(f"Early stopping at epoch {epoch+1}. Best epoch: {best_epoch}")
             break
 
-    torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_last.pth"))
+    torch.save(model.state_dict(), os.path.join(output_dir, f"{arch}_last.pth"))
 
     return {
         "train_losses": train_losses,

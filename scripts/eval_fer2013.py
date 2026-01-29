@@ -13,8 +13,20 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.data.affectnet_yolo_data import make_affectnet_yolo_loader
+from src.data.fer_data import make_fer_loaders
 from src.models.factory import build_model
+
+
+def _unwrap_dataset(dataset):
+    return dataset.dataset if hasattr(dataset, "dataset") else dataset
+
+
+def _get_class_names(dataset, num_classes: int) -> list[str]:
+    base = _unwrap_dataset(dataset)
+    classes = getattr(base, "classes", None)
+    if classes:
+        return list(classes)
+    return [str(i) for i in range(num_classes)]
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
@@ -34,17 +46,16 @@ def _strip_module_prefix(state: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Evaluate a checkpoint on AffectNet YOLO-format splits."
-    )
-    parser.add_argument("--data-dir", default="data/AffectNet")
+    parser = argparse.ArgumentParser(description="Evaluate FER2013 model.")
+    parser.add_argument("--data-path", default="data/FER13")
     parser.add_argument("--weights", required=True, help="Path to checkpoint .pth")
-    parser.add_argument("--split", choices=["train", "test", "val", "valid"], default="test")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
-    parser.add_argument("--output-dir", default="outputs/affectnet_eval")
+    parser.add_argument("--split", choices=["val", "train"], default="val")
+    parser.add_argument("--val-split", type=float, default=0.1)
+    parser.add_argument("--output-dir", default="outputs/fer2013_eval")
     parser.add_argument("--use-mtcnn", action="store_true")
     parser.add_argument("--mtcnn-margin", type=float, default=0.25)
     parser.add_argument("--mtcnn-device", type=str, default="cpu")
@@ -65,33 +76,29 @@ def main() -> None:
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-    in_channels = 1
-
-    dataset, loader = make_affectnet_yolo_loader(
-        data_dir=args.data_dir,
-        split=args.split,
+    train_loader, val_loader = make_fer_loaders(
+        args.data_path,
         batch_size=args.batch_size,
+        val_split=args.val_split,
+        seed=42,
         num_workers=args.num_workers,
         image_size=args.image_size,
+        augmentation="basic",
         use_mtcnn=args.use_mtcnn,
         mtcnn_margin=args.mtcnn_margin,
         mtcnn_device=args.mtcnn_device,
     )
 
-    class_names = dataset.class_names
+    eval_loader = val_loader if args.split == "val" else train_loader
+    if eval_loader is None:
+        raise FileNotFoundError(f"FER2013 {args.split} split not found.")
+
+    class_names = _get_class_names(eval_loader.dataset, 0)
     num_classes = len(class_names)
     if class_names:
         print(f"Class order: {class_names}")
-    fc_weight = state.get("fc.weight")
-    if isinstance(fc_weight, torch.Tensor) and fc_weight.ndim == 2:
-        expected_classes = int(fc_weight.shape[0])
-        if expected_classes != num_classes:
-            raise ValueError(
-                f"Checkpoint expects {expected_classes} classes, but dataset has {num_classes}. "
-                "Check drop flags or use a matching checkpoint."
-            )
 
-    model = build_model(args.arch, num_classes=num_classes, in_channels=in_channels).to(device)
+    model = build_model(args.arch, num_classes=num_classes, in_channels=1).to(device)
     model.load_state_dict(state)
     model.eval()
 
@@ -101,13 +108,12 @@ def main() -> None:
     printed_debug = False
 
     with torch.no_grad():
-        for imgs, labels in loader:
+        for imgs, labels in eval_loader:
             if not printed_debug:
                 print("conv1:", tuple(model.conv1.weight.shape))
                 print("batch:", tuple(imgs.shape))
                 print("batch_dtype:", imgs.dtype)
                 print("batch_range:", (float(imgs.min()), float(imgs.max())))
-                print("class_names:", dataset.class_names)
                 printed_debug = True
             imgs, labels = imgs.to(device), labels.to(device)
             outputs = model(imgs)
@@ -122,8 +128,9 @@ def main() -> None:
             ).reshape(num_classes, num_classes)
 
     acc = 100 * correct / max(total, 1)
-    print(f"Test Acc: {acc:.2f}%")
-    title_base = f"AffectNet {args.split} Acc: {acc:.2f}%"
+    split_label = "Val" if args.split == "val" else "Train"
+    print(f"{split_label} Acc: {acc:.2f}%")
+    title_base = f"FER2013 {split_label} Acc: {acc:.2f}%"
 
     os.makedirs(args.output_dir, exist_ok=True)
     cm_array = cm.numpy()
@@ -172,16 +179,6 @@ def main() -> None:
     np.savetxt(csv_norm_path, cm_norm * 100.0, delimiter=",", fmt="%.2f")
     print(f"Saved confusion matrix to: {cm_path}")
     print(f"Saved normalized confusion matrix to: {cm_norm_path}")
-
-    stats = dataset.stats
-    if any(stats.values()):
-        print(
-            "Dataset filter stats:",
-            f"missing_images={stats['missing_images']},",
-            f"empty_labels={stats['empty_labels']},",
-            f"dropped_labels={stats['dropped_labels']},",
-            f"multi_label_files={stats['multi_label_files']}",
-        )
 
 
 if __name__ == "__main__":

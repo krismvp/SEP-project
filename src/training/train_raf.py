@@ -4,12 +4,12 @@ from typing import Dict, List, Optional, Tuple, cast
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
 from src.constants.emotions import CANON_6
 from src.data.raf_data import make_raf_loaders
-from src.models.resnet_small import ResNet18
+from src.models.factory import build_model
 from src.training.train_fer2013 import get_device, set_seed
 
 
@@ -169,7 +169,7 @@ def _label_from_sample(sample: object) -> Optional[int]:
     return None
 
 
-def _extract_labels(dataset: torch.utils.data.Dataset) -> List[int]:
+def _extract_labels(dataset: Dataset) -> List[int]:
     if isinstance(dataset, Subset):
         base = dataset.dataset
         indices = list(dataset.indices)
@@ -253,6 +253,10 @@ def train_raf(
     use_weighted_sampler: bool = False,
     class_weight_power: float = 0.5,
     label_smoothing: float = 0.05,
+    arch: str = "resnet18",
+    use_mtcnn: bool = False,
+    mtcnn_margin: float = 0.25,
+    mtcnn_device: str | None = None,
 ) -> Dict[str, List[float]]:
     set_seed(seed)
     device = get_device()
@@ -268,6 +272,9 @@ def train_raf(
         train_csv=train_csv,
         test_csv=test_csv,
         image_dir=image_dir,
+        use_mtcnn=use_mtcnn,
+        mtcnn_margin=mtcnn_margin,
+        mtcnn_device=mtcnn_device,
     )
     train_size = _safe_len(train_loader.dataset)
     val_size = _safe_len(val_loader.dataset) if val_loader is not None else 0
@@ -276,7 +283,7 @@ def train_raf(
         f"Train samples: {train_size} | Val samples: {val_size} | Test samples: {test_size}"
     )
 
-    model = ResNet18(num_classes=num_classes, in_channels=1).to(device)
+    model = build_model(arch, num_classes=num_classes, in_channels=1).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
 
@@ -328,7 +335,7 @@ def train_raf(
     epochs_since_improve = 0
     min_delta = 1e-4
     os.makedirs(output_dir, exist_ok=True)
-    best_path = os.path.join(output_dir, "resnet18_finetune_best.pth")
+    best_path = os.path.join(output_dir, f"{arch}_finetune_best.pth")
 
     history = {
         "train_losses": [],
@@ -408,7 +415,7 @@ def train_raf(
                 print(f"Early stopping at epoch {epoch}. Best epoch: {best_epoch}")
                 break
 
-    torch.save(model.state_dict(), os.path.join(output_dir, "resnet18_finetune_last.pth"))
+    torch.save(model.state_dict(), os.path.join(output_dir, f"{arch}_finetune_last.pth"))
 
     if val_loader is not None and os.path.exists(best_path):
         model.load_state_dict(torch.load(best_path, map_location="cpu"))
