@@ -19,18 +19,14 @@ def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
 
 def _resolve_ferplus_root(data_dir: str) -> Path:
     root = Path(data_dir)
-    candidates = [
-        root,
-        root / "fer2013plus" / "fer2013",
-        root / "fer2013plus",
-        root / "fer2013",
-    ]
-    for candidate in candidates:
-        if _find_split_dir(candidate, ["train", "Training"]) is not None:
-            return candidate
+    if _find_split_dir(root, ["train", "Training"]) is not None:
+        return root
+    default_root = root / "fer2013plus" / "fer2013"
+    if _find_split_dir(default_root, ["train", "Training"]) is not None:
+        return default_root
     raise FileNotFoundError(
         "FER+ not found. Expected train/ (or Training/) under: "
-        f"{', '.join(str(c) for c in candidates)}"
+        f"{root} or {default_root}"
     )
 
 

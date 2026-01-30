@@ -62,13 +62,13 @@ def fer_eval_transforms(
     mtcnn_device: str | None = None,
 ):
     mean, std = _fer_norm_stats()
-    ops: list[Transform] = _maybe_mtcnn_ops(use_mtcnn, image_size, mtcnn_margin, mtcnn_device)
-    ops += [
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
-    ]
+    ops: list[Transform] = _maybe_mtcnn_ops(
+        use_mtcnn, image_size, mtcnn_margin, mtcnn_device
+    )
+    ops.append(transforms.Grayscale(num_output_channels=1))
+    if not use_mtcnn:
+        ops.append(transforms.Resize((image_size, image_size)))
+    ops.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     return transforms.Compose(ops)
 
 def raf_train_transforms(
@@ -78,7 +78,9 @@ def raf_train_transforms(
     mtcnn_device: str | None = None,
 ):
     mean, std = _fer_norm_stats()
-    ops: list[Transform] = _maybe_mtcnn_ops(use_mtcnn, image_size, mtcnn_margin, mtcnn_device)
+    ops: list[Transform] = _maybe_mtcnn_ops(
+        use_mtcnn, image_size, mtcnn_margin, mtcnn_device
+    )
     ops += [
         transforms.Grayscale(num_output_channels=1),
         transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
@@ -99,11 +101,11 @@ def raf_eval_transforms(
     mtcnn_device: str | None = None,
 ):
     mean, std = _fer_norm_stats()
-    ops: list[Transform] = _maybe_mtcnn_ops(use_mtcnn, image_size, mtcnn_margin, mtcnn_device)
-    ops += [
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
-    ]
+    ops: list[Transform] = _maybe_mtcnn_ops(
+        use_mtcnn, image_size, mtcnn_margin, mtcnn_device
+    )
+    ops.append(transforms.Grayscale(num_output_channels=1))
+    if not use_mtcnn:
+        ops.append(transforms.Resize((image_size, image_size)))
+    ops.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     return transforms.Compose(ops)

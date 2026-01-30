@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.data.ssl_data import make_ssl_loader
-from src.models.resnet_small import ResNet18
+from src.models.resnet18_small import ResNet18
 
 
 def get_device() -> torch.device:

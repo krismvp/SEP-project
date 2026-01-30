@@ -1,4 +1,4 @@
-from src.models.resnet_small import ResNet18
+from src.models.resnet18_small import ResNet18
 from src.models.resnet34_small import resnet34_small
 
 

@@ -1,6 +1,13 @@
 CANON_6 = ["anger", "disgust", "fear", "happy", "sad", "surprise"]
 
-CLASS_TO_IDX = {name: idx for idx, name in enumerate(CANON_6)}
+CLASS_TO_IDX = {
+    "anger": 0,
+    "disgust": 1,
+    "fear": 2,
+    "happy": 3,
+    "sad": 4,
+    "surprise": 5,
+}
 
 ALIASES = {
     "anger": "anger",
