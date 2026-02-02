@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from src.models.resnet_small import ResNet18

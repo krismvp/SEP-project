@@ -91,7 +91,8 @@ class GradCAM:
 
         # weighted sum -> (1, 1, h, w)
         cam = (weights * acts).sum(dim=1, keepdim=True)
-        cam = F.relu(cam)
+        # Use absolute activations so CAM is visible even when contributions are negative.
+        cam = cam.abs()
 
         # upsample to input size
         cam = F.interpolate(cam, size=x.shape[-2:], mode="bilinear", align_corners=False)
