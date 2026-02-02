@@ -4,15 +4,12 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import cv2
 import torch
 import numpy as np
+from src.models.resnet_small import ResNet18
 from torchvision import transforms
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from PIL import Image
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.abspath(os.path.join(BASE_DIR, '../..')))
-from src.models.resnet34_small import ResNet34
 
 COLOR_MAIN = (180, 255, 180)    
 COLOR_ACCENT = (100, 255, 100)
@@ -26,14 +23,13 @@ AA = cv2.LINE_AA
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 class_names = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise']
 
-model = ResNet34(num_classes=6, in_channels=1).to(device)
-model_path = os.path.join(BASE_DIR, "../../outputs/resnet34_best.pth")
-model.load_state_dict(torch.load(model_path, map_location=device))
+model = ResNet18(num_classes=6, in_channels=1).to(device)
+model.load_state_dict(torch.load("outputs/resnet18_best-2.pth", map_location=device))
 model.eval()
 
 target_layers = [model.layer4[-1]]
 cam = GradCAM(model=model, target_layers=target_layers)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = cv2.CascadeClassifier("data/haarcascade_frontalface_default.xml")
 
 preprocess = transforms.Compose([
     transforms.Resize((64, 64)),
@@ -43,25 +39,15 @@ preprocess = transforms.Compose([
 ])
 
 def process_video(input_path, output_path):
-    full_input_path = os.path.join(BASE_DIR, "../../", input_path)
-    full_output_path = os.path.join(BASE_DIR, "../../", output_path)
-
-    cap = cv2.VideoCapture(full_input_path)
-    if not cap.isOpened():
-        print(f"Error: Could not open video {full_input_path}")
-        return
-    
+    cap = cv2.VideoCapture(input_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
 
     fourcc = cv2.VideoWriter_fourcc(*'avc1')
-    out = cv2.VideoWriter(full_output_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-    prob_buffer = []
-    buffer_size = 12
-
-    print(f"Processing video: {input_path} ...")
+    print(f"processing...")
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -79,23 +65,17 @@ def process_video(input_path, output_path):
                 outputs = model(input_tensor)
                 probs = torch.nn.functional.softmax(outputs, dim=1)[0].cpu().numpy()
             
-            prob_buffer.append(probs)
-            if len(prob_buffer) > buffer_size:
-                prob_buffer.pop(0)
-            avg_probs = np.mean(prob_buffer, axis=0)
-            pred_idx = np.argmax(avg_probs)
-            try:
-               targets = [ClassifierOutputTarget(pred_idx)]
-               grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0, :]
-               img_float = np.float32(cv2.resize(rgb_roi, (64, 64))) / 255
-               cam_image = show_cam_on_image(img_float, grayscale_cam, use_rgb=True)
-               cam_image_bgr = cv2.resize(cv2.cvtColor(cam_image, cv2.COLOR_RGB2BGR), (w, h))
+            pred_idx = np.argmax(probs)
+
+            targets = [ClassifierOutputTarget(pred_idx)]
+            grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0, :]
+            img_float = np.float32(cv2.resize(rgb_roi, (64, 64))) / 255
+            cam_image = show_cam_on_image(img_float, grayscale_cam, use_rgb=True)
+            cam_image_bgr = cv2.resize(cv2.cvtColor(cam_image, cv2.COLOR_RGB2BGR), (w, h))
             
-               face_zone = frame[y:y+h, x:x+w]
-               frame[y:y+h, x:x+w] = cv2.addWeighted(face_zone, 0.5, cam_image_bgr, 0.5, 0)
-            except:
-                pass
-    
+            face_zone = frame[y:y+h, x:x+w]
+            frame[y:y+h, x:x+w] = cv2.addWeighted(face_zone, 0.5, cam_image_bgr, 0.5, 0)
+
             cv2.rectangle(frame, (x, y), (x+w, y+h), COLOR_MAIN, 2) 
             label = f"{class_names[pred_idx].upper()}"
             cv2.rectangle(frame, (x, y-35), (x + int(w*0.5), y), COLOR_MAIN, -1)
@@ -112,7 +92,7 @@ def process_video(input_path, output_path):
             cv2.putText(frame, "EMOTION ANALYSIS", (panel_x + 15, panel_y + 35), 
                         FONT, 0.6, COLOR_MAIN, 1, AA)
 
-            for i, (name, prob) in enumerate(zip(class_names, avg_probs)):
+            for i, (name, prob) in enumerate(zip(class_names, probs)):
                 ry = panel_y + 75 + (i * 35)
                 bar_max_width = 140
                 bar_width = int(prob * bar_max_width)
@@ -124,13 +104,14 @@ def process_video(input_path, output_path):
                 cv2.putText(frame, f"{name}", (panel_x + 15, ry + 12), FONT, 0.5, COLOR_TEXT, txt_thick, AA), 
                 cv2.rectangle(frame, (panel_x + 100, ry), (panel_x + 100 + bar_max_width, ry + 15), COLOR_BAR_BG, -1)
                 cv2.rectangle(frame, (panel_x + 100, ry), (panel_x + 100 + bar_width, ry + 15), current_color, -1)
-                cv2.putText(frame, f"{prob*100:.1f}%", (panel_x + 100 + bar_max_width + 10, ry + 12), FONT, 0.45, COLOR_TEXT, txt_thick, AA)
+                cv2.putText(frame, f"{prob*100:.1f}%", (panel_x + 100 + bar_max_width + 10, ry + 12), 
+                            FONT, 0.45, COLOR_TEXT, txt_thick, AA)
 
         out.write(frame)
 
     cap.release()
     out.release()
-    print(f"Export Complete: {full_output_path}")
+    print("Export Complete")
 
 if __name__ == "__main__":
     process_video("data/input_video5.mp4", "outputs/processed_video.mp4")
