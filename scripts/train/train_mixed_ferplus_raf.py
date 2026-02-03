@@ -31,8 +31,6 @@ def main() -> None:
     parser.add_argument("--augmentation", choices=["basic", "strong"], default="strong")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pretrained-path", type=str, default=None)
-    parser.add_argument("--freeze-epochs", type=int, default=0)
-    parser.add_argument("--head-lr", type=float, default=None)
     parser.add_argument("--backbone-lr", type=float, default=None)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--label-smoothing", type=float, default=0.05)
@@ -46,8 +44,6 @@ def main() -> None:
     parser.add_argument("--no-mtcnn", action="store_true")
     parser.add_argument("--mtcnn-margin", type=float, default=0.25)
     parser.add_argument("--mtcnn-device", type=str, default="cpu")
-    parser.add_argument("--mixup", action="store_true")
-    parser.add_argument("--mixup-alpha", type=float, default=0.2)
     parser.add_argument(
         "--domain-probs",
         type=float,
@@ -58,7 +54,7 @@ def main() -> None:
     parser.add_argument("--selection-metric", choices=["avg", "min"], default="avg")
     parser.add_argument(
         "--output-dir",
-        default="outputs/mixed/ferplus_raf_resnet34_mtcnn_mixup",
+        default="outputs/mixed/ferplus_raf_resnet34_mtcnn",
     )
     args = parser.parse_args()
     if args.no_mtcnn:
@@ -80,8 +76,6 @@ def main() -> None:
         augmentation=args.augmentation,
         lr=args.lr,
         pretrained_path=args.pretrained_path,
-        freeze_epochs=args.freeze_epochs,
-        head_lr=args.head_lr,
         backbone_lr=args.backbone_lr,
         weight_decay=args.weight_decay,
         label_smoothing=args.label_smoothing,
@@ -94,8 +88,6 @@ def main() -> None:
         use_mtcnn=args.use_mtcnn,
         mtcnn_margin=args.mtcnn_margin,
         mtcnn_device=args.mtcnn_device,
-        mixup=args.mixup,
-        mixup_alpha=args.mixup_alpha,
         domain_probs=args.domain_probs,
         selection_metric=args.selection_metric,
         output_dir=args.output_dir,

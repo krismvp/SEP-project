@@ -25,8 +25,6 @@ def main() -> None:
     parser.add_argument("--output-dir", default="outputs/ferplus")
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--pretrained-path", type=str, default=None)
-    parser.add_argument("--freeze-epochs", type=int, default=0)
-    parser.add_argument("--head-lr", type=float, default=None)
     parser.add_argument("--backbone-lr", type=float, default=None)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -59,9 +57,7 @@ def main() -> None:
         num_workers=args.num_workers,
         image_size=args.image_size,
         pretrained_path=args.pretrained_path,
-        freeze_epochs=args.freeze_epochs,
         backbone_lr=args.backbone_lr,
-        head_lr=args.head_lr,
         weight_decay=args.weight_decay,
         use_weighted_loss=not args.no_weighted_loss,
         use_weighted_sampler=args.weighted_sampler,

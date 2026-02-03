@@ -15,9 +15,7 @@ from src.training.train_utils import (
     get_device,
     set_seed,
     _build_optimizer,
-    _freeze_backbone,
     _load_pretrained_backbone,
-    _unfreeze_backbone,
     _extract_labels,
     _compute_class_weights,
 )
@@ -117,19 +115,6 @@ class BalancedConcatSampler(Sampler[int]):
         return self.num_samples
 
 
-def _mixup_batch(
-    inputs: torch.Tensor, targets: torch.Tensor, alpha: float
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
-    if alpha <= 0:
-        return inputs, targets, targets, 1.0
-    lam = torch.distributions.Beta(alpha, alpha).sample().item()
-    indices = torch.randperm(inputs.size(0), device=inputs.device)
-    mixed_inputs = lam * inputs + (1.0 - lam) * inputs[indices]
-    targets_a = targets
-    targets_b = targets[indices]
-    return mixed_inputs, targets_a, targets_b, lam
-
-
 def _eval_loss_acc(
     model: nn.Module, loader: DataLoader, device: torch.device, criterion: nn.Module
 ) -> tuple[float, float]:
@@ -158,8 +143,6 @@ def _run_epoch(
     device: torch.device,
     train: bool,
     optimizer: Optional[torch.optim.Optimizer] = None,
-    mixup: bool = False,
-    mixup_alpha: float = 0.2,
     desc: str = "",
 ) -> tuple[float, Optional[float]]:
     if train:
@@ -178,21 +161,11 @@ def _run_epoch(
             imgs, labels = imgs.to(device), labels.to(device)
             if train and optimizer is not None:
                 optimizer.zero_grad(set_to_none=True)
-            if train and mixup:
-                mixed_imgs, y_a, y_b, lam = _mixup_batch(
-                    imgs, labels, mixup_alpha
-                )
-                outputs = model(mixed_imgs)
-                loss = lam * criterion(outputs, y_a) + (1.0 - lam) * criterion(
-                    outputs, y_b
-                )
-                total += y_a.size(0)
-            else:
-                outputs = model(imgs)
-                loss = criterion(outputs, labels)
-                preds = outputs.argmax(dim=1)
-                total += labels.size(0)
-                correct += (preds == labels).sum().item()
+            outputs = model(imgs)
+            loss = criterion(outputs, labels)
+            preds = outputs.argmax(dim=1)
+            total += labels.size(0)
+            correct += (preds == labels).sum().item()
 
             if train and optimizer is not None:
                 loss.backward()
@@ -201,9 +174,7 @@ def _run_epoch(
             running_loss += loss.item() * labels.size(0)
 
     loss = running_loss / max(total, 1)
-    acc = None
-    if not mixup:
-        acc = 100.0 * correct / max(total, 1)
+    acc = 100.0 * correct / max(total, 1)
     return loss, acc
 
 
@@ -218,8 +189,6 @@ def train_mixed_ferplus_raf(
     augmentation: str = "strong",
     lr: float = 1e-3,
     pretrained_path: Optional[str] = None,
-    freeze_epochs: int = 0,
-    head_lr: Optional[float] = None,
     backbone_lr: Optional[float] = None,
     weight_decay: float = 1e-4,
     label_smoothing: float = 0.05,
@@ -232,11 +201,9 @@ def train_mixed_ferplus_raf(
     use_mtcnn: bool = True,
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
-    mixup: bool = False,
-    mixup_alpha: float = 0.2,
     domain_probs: Optional[List[float]] = None,
     selection_metric: str = "avg",
-    output_dir: str = "outputs/mixed/ferplus_raf_resnet34_mtcnn_mixup",
+    output_dir: str = "outputs/mixed/ferplus_raf_resnet34_mtcnn",
 ):
     set_seed(seed)
     device = get_device()
@@ -342,16 +309,10 @@ def train_mixed_ferplus_raf(
     model = build_model(arch, num_classes=num_classes, in_channels=1).to(device)
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
-    if freeze_epochs > 0 and pretrained_path:
-        _freeze_backbone(model)
-    elif freeze_epochs > 0:
-        print("Warning: freeze-epochs requested without pretrained-path; ignoring.")
-
-    head_lr = head_lr if head_lr is not None else lr
     if backbone_lr is None:
         backbone_lr = lr if pretrained_path is None else lr * 0.1
 
-    optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
+    optimizer = _build_optimizer(model, backbone_lr, lr, weight_decay)
     weight_tensor = None
     if use_weighted_loss and class_weights is not None:
         weight_tensor = class_weights.to(device)
@@ -388,15 +349,6 @@ def train_mixed_ferplus_raf(
 
     for epoch in range(1, epochs + 1):
         sampler.set_epoch(epoch)
-        if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs + 1:
-            _unfreeze_backbone(model)
-            optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
-            for group in optimizer.param_groups:
-                group.setdefault("initial_lr", group["lr"])
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=max(epochs, 1), last_epoch=epoch - 1
-            )
-            print("Unfroze backbone for full fine-tuning.")
         train_loss, train_acc = _run_epoch(
             model,
             mixed_loader,
@@ -404,8 +356,6 @@ def train_mixed_ferplus_raf(
             device,
             train=True,
             optimizer=optimizer,
-            mixup=mixup,
-            mixup_alpha=mixup_alpha,
             desc=f"Epoch {epoch}/{epochs} [train]",
         )
 
@@ -426,22 +376,13 @@ def train_mixed_ferplus_raf(
         history["val_acc_raf"].append(val_acc_raf)
         history["score"].append(score)
 
-        if train_acc is None:
-            print(
-                f"Epoch {epoch}: "
-                f"Train Loss = {train_loss:.4f} | "
-                f"Val FER+ Loss = {val_loss_fer:.4f} | Val FER+ Acc = {val_acc_fer:.2f}% | "
-                f"Val RAF Loss = {val_loss_raf:.4f} | Val RAF Acc = {val_acc_raf:.2f}% | "
-                f"Score = {score:.2f} | Val Loss Avg = {val_loss_avg:.4f}"
-            )
-        else:
-            print(
-                f"Epoch {epoch}: "
-                f"Train Loss = {train_loss:.4f} | Train Acc = {train_acc:.2f}% | "
-                f"Val FER+ Loss = {val_loss_fer:.4f} | Val FER+ Acc = {val_acc_fer:.2f}% | "
-                f"Val RAF Loss = {val_loss_raf:.4f} | Val RAF Acc = {val_acc_raf:.2f}% | "
-                f"Score = {score:.2f} | Val Loss Avg = {val_loss_avg:.4f}"
-            )
+        print(
+            f"Epoch {epoch}: "
+            f"Train Loss = {train_loss:.4f} | Train Acc = {train_acc:.2f}% | "
+            f"Val FER+ Loss = {val_loss_fer:.4f} | Val FER+ Acc = {val_acc_fer:.2f}% | "
+            f"Val RAF Loss = {val_loss_raf:.4f} | Val RAF Acc = {val_acc_raf:.2f}% | "
+            f"Score = {score:.2f} | Val Loss Avg = {val_loss_avg:.4f}"
+        )
 
         if score > best_score:
             best_score = score

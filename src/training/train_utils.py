@@ -166,7 +166,7 @@ def _build_optimizer(
         param_groups.append({"params": backbone_params, "lr": backbone_lr})
     if head_params:
         param_groups.append({"params": head_params, "lr": head_lr})
-    return optim.Adam(param_groups, weight_decay=weight_decay)
+    return optim.AdamW(param_groups, weight_decay=weight_decay)
 
 
 __all__ = [

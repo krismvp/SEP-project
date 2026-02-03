@@ -16,9 +16,7 @@ from src.training.train_utils import (
     _compute_class_weights,
     _build_optimizer,
     _extract_labels,
-    _freeze_backbone,
     _load_pretrained_backbone,
-    _unfreeze_backbone,
 )
 
 
@@ -115,11 +113,9 @@ def train_raf(
     lr: float = 1e-3,
     batch_size: int = 64,
     epochs: int = 25,
-    head_lr: Optional[float] = None,
     backbone_lr: Optional[float] = None,
     weight_decay: float = 1e-4,
     val_split: float = 0.1,
-    freeze_epochs: int = 5,
     patience: int = 5,
     num_workers: int = 4,
     seed: int = 42,
@@ -199,13 +195,10 @@ def train_raf(
     else:
         criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-    head_lr = head_lr if head_lr is not None else lr
     if backbone_lr is None:
         backbone_lr = lr if pretrained_path is None else lr * 0.1
 
-    if freeze_epochs > 0 and pretrained_path:
-        _freeze_backbone(model)
-    optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
+    optimizer = _build_optimizer(model, backbone_lr, lr, weight_decay)
 
     best_val_acc = -1.0
     best_val_loss = float("inf")
@@ -225,11 +218,6 @@ def train_raf(
     debug_state = {"printed": False}
 
     for epoch in range(1, epochs + 1):
-        if freeze_epochs > 0 and pretrained_path and epoch == freeze_epochs + 1:
-            _unfreeze_backbone(model)
-            optimizer = _build_optimizer(model, backbone_lr, head_lr, weight_decay)
-            print("Unfroze backbone for full fine-tuning.")
-
         train_loss, train_acc = _run_epoch(
             model,
             train_loader,

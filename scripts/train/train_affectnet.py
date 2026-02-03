@@ -37,8 +37,6 @@ def main() -> None:
     parser.add_argument("--no-mtcnn", action="store_true")
     parser.add_argument("--mtcnn-margin", type=float, default=0.25)
     parser.add_argument("--mtcnn-device", type=str, default="cpu")
-    parser.add_argument("--mixup", action="store_true")
-    parser.add_argument("--mixup-alpha", type=float, default=0.2)
     parser.add_argument("--output-dir", default="outputs/pretrain/affectnet")
     args = parser.parse_args()
 
@@ -72,8 +70,6 @@ def main() -> None:
         use_mtcnn=args.use_mtcnn,
         mtcnn_margin=args.mtcnn_margin,
         mtcnn_device=args.mtcnn_device,
-        mixup=args.mixup,
-        mixup_alpha=args.mixup_alpha,
         output_dir=args.output_dir,
     )
 

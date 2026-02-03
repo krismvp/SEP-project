@@ -1,4 +1,5 @@
 import argparse
+import csv
 import os
 import sys
 from pathlib import Path
@@ -9,10 +10,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.utils.data import Subset
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
+from src.constants.emotions import normalize_emotion
 from src.data.affectnet_data import make_affectnet_loaders
 from src.models.factory import build_model
 
@@ -27,6 +30,73 @@ def _get_class_names(dataset, num_classes: int) -> list[str]:
     if classes:
         return list(classes)
     return [str(i) for i in range(num_classes)]
+
+
+def _sample_to_path(sample) -> str:
+    if isinstance(sample, (list, tuple)) and sample:
+        return str(sample[0])
+    path = getattr(sample, "path", None)
+    if path is not None:
+        return str(path)
+    raise ValueError("Unable to extract filepath from dataset sample.")
+
+
+def _extract_paths(dataset) -> list[str]:
+    if isinstance(dataset, Subset):
+        base = dataset.dataset
+        indices = list(dataset.indices)
+        base_paths = _extract_paths(base)
+        return [base_paths[idx] for idx in indices]
+    samples = getattr(dataset, "samples", None)
+    if samples is not None:
+        return [_sample_to_path(sample) for sample in samples]
+    imgs = getattr(dataset, "imgs", None)
+    if imgs is not None:
+        return [_sample_to_path(sample) for sample in imgs]
+    raise ValueError("Dataset does not expose sample paths for CSV export.")
+
+
+def _pretty_label(name: str) -> str:
+    norm = normalize_emotion(name)
+    if norm == "happy":
+        return "happiness"
+    if norm == "sad":
+        return "sadness"
+    return norm
+
+
+def _resolve_pred_order(
+    class_names: list[str], desired_order: list[str]
+) -> tuple[list[str], list[int]]:
+    norm_to_idx = {normalize_emotion(name): idx for idx, name in enumerate(class_names)}
+    header: list[str] = []
+    order_indices: list[int] = []
+    missing: list[str] = []
+    for name in desired_order:
+        norm = normalize_emotion(name)
+        idx = norm_to_idx.get(norm)
+        if idx is None:
+            missing.append(name)
+            continue
+        header.append(name)
+        order_indices.append(idx)
+    if missing:
+        print(
+            "Warning: prediction CSV order not found; using dataset class order."
+        )
+        header = [_pretty_label(name) for name in class_names]
+        order_indices = list(range(len(class_names)))
+    return header, order_indices
+
+
+DEFAULT_PRED_ORDER = [
+    "happiness",
+    "surprise",
+    "sadness",
+    "anger",
+    "disgust",
+    "fear",
+]
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
@@ -52,6 +122,12 @@ def main() -> None:
     parser.add_argument("--no-mtcnn", action="store_true")
     parser.add_argument("--mtcnn-margin", type=float, default=0.25)
     parser.add_argument("--mtcnn-device", type=str, default="cpu")
+    parser.add_argument(
+        "--preds-order",
+        nargs="+",
+        default=DEFAULT_PRED_ORDER,
+        help="CSV column order for probability export.",
+    )
     args = parser.parse_args()
     if args.no_mtcnn:
         args.use_mtcnn = False
@@ -101,42 +177,59 @@ def main() -> None:
     model.load_state_dict(state)
     model.eval()
 
+    os.makedirs(args.output_dir, exist_ok=True)
+    preds_path = os.path.join(args.output_dir, "predictions.csv")
+    paths = _extract_paths(eval_loader.dataset)
+    header, order_indices = _resolve_pred_order(class_names, args.preds_order)
+    if len(paths) != len(eval_loader.dataset):
+        raise ValueError("Prediction CSV path count does not match dataset size.")
+
     cm = torch.zeros((num_classes, num_classes), dtype=torch.int64)
     correct = 0
     total = 0
     printed_debug = False
+    path_offset = 0
 
-    with torch.no_grad():
-        for imgs, labels in eval_loader:
-            if not printed_debug:
-                print("conv1:", tuple(model.conv1.weight.shape))
-                print("batch:", tuple(imgs.shape))
-                print("batch_dtype:", imgs.dtype)
-                print("batch_range:", (float(imgs.min()), float(imgs.max())))
-                print("class_names:", class_names)
-                printed_debug = True
-            imgs, labels = imgs.to(device), labels.to(device)
-            outputs = model(imgs)
-            preds = outputs.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
-            labels_cpu = labels.detach().cpu()
-            preds_cpu = preds.detach().cpu()
-            indices = labels_cpu * num_classes + preds_cpu
-            cm += torch.bincount(
-                indices, minlength=num_classes * num_classes
-            ).reshape(num_classes, num_classes)
+    with open(preds_path, "w", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["filepath"] + header)
+
+        with torch.no_grad():
+            for imgs, labels in eval_loader:
+                if not printed_debug:
+                    print("conv1:", tuple(model.conv1.weight.shape))
+                    print("batch:", tuple(imgs.shape))
+                    print("batch_dtype:", imgs.dtype)
+                    print("batch_range:", (float(imgs.min()), float(imgs.max())))
+                    print("class_names:", class_names)
+                    printed_debug = True
+                imgs, labels = imgs.to(device), labels.to(device)
+                outputs = model(imgs)
+                probs = torch.softmax(outputs, dim=1).detach().cpu().numpy()
+                preds = outputs.argmax(dim=1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
+                labels_cpu = labels.detach().cpu()
+                preds_cpu = preds.detach().cpu()
+                indices = labels_cpu * num_classes + preds_cpu
+                cm += torch.bincount(
+                    indices, minlength=num_classes * num_classes
+                ).reshape(num_classes, num_classes)
+
+                batch_size = labels.size(0)
+                batch_paths = paths[path_offset : path_offset + batch_size]
+                path_offset += batch_size
+                for path, prob in zip(batch_paths, probs):
+                    row = [path] + [f"{prob[idx]:.4f}" for idx in order_indices]
+                    writer.writerow(row)
 
     acc = 100 * correct / max(total, 1)
     print(f"{args.split.title()} Acc: {acc:.2f}%")
     title_base = f"AffectNet {args.split} Acc: {acc:.2f}%"
 
-    os.makedirs(args.output_dir, exist_ok=True)
     cm_array = cm.numpy()
     cm_path = os.path.join(args.output_dir, "confusion_matrix.png")
     cm_norm_path = os.path.join(args.output_dir, "confusion_matrix_normalized.png")
-    csv_path = os.path.join(args.output_dir, "confusion_matrix.csv")
-    csv_norm_path = os.path.join(args.output_dir, "confusion_matrix_normalized.csv")
 
     fig, ax = plt.subplots(figsize=(6, 5))
     im = ax.imshow(cm_array, cmap="Blues")
@@ -151,8 +244,6 @@ def main() -> None:
     fig.tight_layout()
     fig.savefig(cm_path, dpi=150)
     plt.close(fig)
-
-    np.savetxt(csv_path, cm_array, delimiter=",", fmt="%d")
 
     row_sums = cm_array.sum(axis=1, keepdims=True)
     cm_norm = np.divide(
@@ -175,7 +266,6 @@ def main() -> None:
     fig_norm.savefig(cm_norm_path, dpi=150)
     plt.close(fig_norm)
 
-    np.savetxt(csv_norm_path, cm_norm * 100.0, delimiter=",", fmt="%.2f")
     print(f"Saved confusion matrix to: {cm_path}")
     print(f"Saved normalized confusion matrix to: {cm_norm_path}")
 

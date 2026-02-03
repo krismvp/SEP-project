@@ -33,22 +33,25 @@ def fer_train_transforms(
         raise ValueError("augmentation must be 'basic' or 'strong'")
     ops: list[Transform] = _maybe_mtcnn_ops(use_mtcnn, image_size, mtcnn_margin, mtcnn_device)
     if augmentation == "basic":
-        scale = (0.9, 1.0) if use_mtcnn else (0.9, 1.0)
+        scale = (0.9, 1.0) if use_mtcnn else (0.75, 1.0)
         ops += [
             transforms.Grayscale(num_output_channels=1),
             transforms.RandomResizedCrop(image_size, scale=scale),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(10),
+            transforms.RandomRotation(18),
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.3, contrast=0.3)], p=0.6
+            ),
         ]
     else:
-        scale = (0.9, 1.0) if use_mtcnn else (0.8, 1.0)
+        scale = (0.9, 1.0) if use_mtcnn else (0.75, 1.0)
         ops += [
             transforms.Grayscale(num_output_channels=1),
             transforms.RandomResizedCrop(image_size, scale=scale),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(15),
+            transforms.RandomRotation(18),
             transforms.RandomApply(
-                [transforms.ColorJitter(brightness=0.3, contrast=0.3)], p=0.8
+                [transforms.ColorJitter(brightness=0.3, contrast=0.3)], p=0.6
             ),
         ]
     ops.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
@@ -81,13 +84,14 @@ def raf_train_transforms(
     ops: list[Transform] = _maybe_mtcnn_ops(
         use_mtcnn, image_size, mtcnn_margin, mtcnn_device
     )
+    scale = (0.9, 1.0) if use_mtcnn else (0.75, 1.0)
     ops += [
         transforms.Grayscale(num_output_channels=1),
-        transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
+        transforms.RandomResizedCrop(image_size, scale=scale),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomRotation(10),
+        transforms.RandomRotation(18),
         transforms.RandomApply(
-            [transforms.ColorJitter(brightness=0.3, contrast=0.3)], p=0.8
+            [transforms.ColorJitter(brightness=0.3, contrast=0.3)], p=0.6
         ),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),

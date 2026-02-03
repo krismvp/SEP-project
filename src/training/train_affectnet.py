@@ -20,19 +20,6 @@ from src.training.train_utils import (
 )
 
 
-def _mixup_batch(
-    inputs: torch.Tensor, targets: torch.Tensor, alpha: float
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
-    if alpha <= 0:
-        return inputs, targets, targets, 1.0
-    lam = torch.distributions.Beta(alpha, alpha).sample().item()
-    indices = torch.randperm(inputs.size(0), device=inputs.device)
-    mixed_inputs = lam * inputs + (1.0 - lam) * inputs[indices]
-    targets_a = targets
-    targets_b = targets[indices]
-    return mixed_inputs, targets_a, targets_b, lam
-
-
 def _eval_loss_acc(
     model: nn.Module, loader: DataLoader, device: torch.device, criterion: nn.Module
 ) -> tuple[float, float]:
@@ -61,8 +48,6 @@ def _run_epoch(
     device: torch.device,
     train: bool,
     optimizer: Optional[torch.optim.Optimizer] = None,
-    mixup: bool = False,
-    mixup_alpha: float = 0.2,
     desc: str = "",
 ) -> tuple[float, Optional[float]]:
     if train:
@@ -81,21 +66,11 @@ def _run_epoch(
             imgs, labels = imgs.to(device), labels.to(device)
             if train and optimizer is not None:
                 optimizer.zero_grad(set_to_none=True)
-            if train and mixup:
-                mixed_imgs, y_a, y_b, lam = _mixup_batch(
-                    imgs, labels, mixup_alpha
-                )
-                outputs = model(mixed_imgs)
-                loss = lam * criterion(outputs, y_a) + (1.0 - lam) * criterion(
-                    outputs, y_b
-                )
-                total += y_a.size(0)
-            else:
-                outputs = model(imgs)
-                loss = criterion(outputs, labels)
-                preds = outputs.argmax(dim=1)
-                total += labels.size(0)
-                correct += (preds == labels).sum().item()
+            outputs = model(imgs)
+            loss = criterion(outputs, labels)
+            preds = outputs.argmax(dim=1)
+            total += labels.size(0)
+            correct += (preds == labels).sum().item()
 
             if train and optimizer is not None:
                 loss.backward()
@@ -104,9 +79,7 @@ def _run_epoch(
             running_loss += loss.item() * labels.size(0)
 
     loss = running_loss / max(total, 1)
-    acc = None
-    if not mixup:
-        acc = 100.0 * correct / max(total, 1)
+    acc = 100.0 * correct / max(total, 1)
     return loss, acc
 
 
@@ -130,8 +103,6 @@ def train_affectnet(
     use_mtcnn: bool,
     mtcnn_margin: float,
     mtcnn_device: str | None,
-    mixup: bool,
-    mixup_alpha: float,
     output_dir: str,
 ) -> Dict[str, List[float]]:
     set_seed(seed)
@@ -232,8 +203,6 @@ def train_affectnet(
             device,
             train=True,
             optimizer=optimizer,
-            mixup=mixup,
-            mixup_alpha=mixup_alpha,
             desc=f"Epoch {epoch}/{epochs} [train]",
         )
         val_loss, val_acc = _eval_loss_acc(model, val_loader, device, criterion)
@@ -244,18 +213,11 @@ def train_affectnet(
         history["val_loss"].append(val_loss)
         history["val_acc"].append(val_acc)
 
-        if train_acc is None:
-            print(
-                f"Epoch {epoch}: "
-                f"Train Loss = {train_loss:.4f} | "
-                f"Val Loss = {val_loss:.4f} | Val Acc = {val_acc:.2f}%"
-            )
-        else:
-            print(
-                f"Epoch {epoch}: "
-                f"Train Loss = {train_loss:.4f} | Train Acc = {train_acc:.2f}% | "
-                f"Val Loss = {val_loss:.4f} | Val Acc = {val_acc:.2f}%"
-            )
+        print(
+            f"Epoch {epoch}: "
+            f"Train Loss = {train_loss:.4f} | Train Acc = {train_acc:.2f}% | "
+            f"Val Loss = {val_loss:.4f} | Val Acc = {val_acc:.2f}%"
+        )
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc

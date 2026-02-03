@@ -26,7 +26,9 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 class_names = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise']
 
 model = ResNet34(num_classes=6, in_channels=1).to(device)
-model_path = os.path.join(BASE_DIR, "../../outputs/resnet34_best.pth")
+model_path = os.path.join(
+    BASE_DIR, "../../outputs/mixed/ferplus_raf_best_generalization/resnet34_best.pth"
+)
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 

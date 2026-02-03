@@ -58,8 +58,7 @@ Fine-tune from CelebA pretrain:
 ```bash
 python scripts/train/train_raf.py \
   --data-dir data/RAF-DB \
-  --pretrained-path outputs/pretrained_backbone.pth \
-  --freeze-epochs 5
+  --pretrained-path outputs/pretrained_backbone.pth
 ```
 
 ## Train/Fine-tune FER+
@@ -73,8 +72,7 @@ Fine-tune from CelebA pretrain:
 ```bash
 python scripts/train/train_ferplus.py \
   --data-dir data/ferplus \
-  --pretrained-path outputs/pretrained_backbone.pth \
-  --freeze-epochs 5
+  --pretrained-path outputs/pretrained_backbone.pth
 ```
 Use `--confusion-matrix` to save a test-set confusion matrix in the output dir.
 For class imbalance, try `--no-weighted-loss` to disable weights or
