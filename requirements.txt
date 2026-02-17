@@ -1,15 +1,20 @@
 # core
-numpy
+numpy<2
 
 # deep learning
 torch
 torchvision
 
 # data & utils
-opencv-python
+opencv-python<4.12
 scikit-learn
 tqdm
 pyyaml
+pillow
 
 # visualization
 matplotlib
+
+# explainability + face detection
+grad-cam
+facenet-pytorch

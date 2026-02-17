@@ -1,5 +1,8 @@
 /data/
 *.pth
+outputs/**/*confusion_matrix*.png
+outputs/**/*confusion_matrix*.csv
+outputs/**/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -208,3 +211,4 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+scripts/tools/stress_test_ferplus_raf.py
