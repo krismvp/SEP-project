@@ -1,6 +1,7 @@
 import torch.nn as nn
 
 class SimpleCNN(nn.Module):
+    """Small CNN baseline used for fast checks and simple comparisons."""
     def __init__(self, num_classes=7):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
@@ -15,6 +16,7 @@ class SimpleCNN(nn.Module):
         self.fc2 = nn.Linear(256, num_classes)
 
     def forward(self, x):
+        """Keep the forward path intentionally shallow for a lightweight baseline."""
         x = self.pool(self.relu(self.conv1(x)))
         x = self.pool(self.relu(self.conv2(x)))
         x = self.pool(self.relu(self.conv3(x)))
@@ -22,5 +24,3 @@ class SimpleCNN(nn.Module):
         x = self.relu(self.fc1(x))
         x = self.dropout(x)
         return self.fc2(x)
-
-# commit test

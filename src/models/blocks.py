@@ -54,6 +54,7 @@ class BasicBlock(nn.Module):
             self.shortcut = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply residual addition so deeper stacks remain easier to optimize."""
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)

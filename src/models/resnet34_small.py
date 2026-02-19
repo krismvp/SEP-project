@@ -37,6 +37,7 @@ class ResNet34(nn.Module):
         self.fc = nn.Linear(base_channels * 8 * BasicBlock.expansion, num_classes)
 
     def _make_layer(self, block, out_channels: int, num_blocks: int, stride: int):
+        """Build one stage while keeping downsampling confined to the first block."""
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
         for s in strides:
@@ -45,6 +46,7 @@ class ResNet34(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Extract hierarchical features and classify after global pooling."""
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -61,6 +63,7 @@ class ResNet34(nn.Module):
 
 
 def resnet34_small(num_classes: int = 6, in_channels: int = 1) -> ResNet34:
+    """Helper factory for consistency with other model constructors."""
     return ResNet34(num_classes=num_classes, in_channels=in_channels)
 
 
