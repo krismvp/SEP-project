@@ -24,6 +24,7 @@ ALIASES = {
 
 
 def normalize_emotion(name: str) -> str:
+    """Normalize label variants to a shared emotion naming scheme."""
     key = name.strip().lower()
     return ALIASES.get(key, key)
 

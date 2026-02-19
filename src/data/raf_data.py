@@ -15,6 +15,7 @@ from src.constants.emotions import CANON_6, CLASS_TO_IDX, normalize_emotion
 
 @dataclass
 class RAFSample:
+    """Small typed record to keep RAF path/label handling explicit."""
     path: Path
     label: int
 
@@ -40,6 +41,7 @@ class RAFDBCsvDataset(Dataset):
         transform=None,
         allow_empty: bool = False,
     ):
+        """Load RAF CSV labels and remap them into the shared 6-class taxonomy."""
         self.csv_path = csv_path
         self.image_dir = image_dir
         self.transform = transform
@@ -79,6 +81,7 @@ def make_raf_loaders(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader], int]:
+    """Build RAF loaders with CSV path fallbacks and canonical class mapping."""
     root = Path(data_dir)
     train_transform = raf_train_transforms(
         image_size=image_size,
@@ -172,6 +175,7 @@ def make_raf_loaders(
 
 
 def _split_indices(num_samples: int, val_split: float, seed: int):
+    """Deterministic split helper so experiments are repeatable."""
     val_size = int(num_samples * val_split)
     if val_size <= 0:
         return list(range(num_samples)), []
@@ -181,6 +185,7 @@ def _split_indices(num_samples: int, val_split: float, seed: int):
 
 
 def _infer_num_classes(dataset: Dataset) -> int:
+    """Infer class count from dataset metadata or sample labels as fallback."""
     if isinstance(dataset, Subset):
         return _infer_num_classes(dataset.dataset)
     classes = getattr(dataset, "classes", None)
@@ -203,6 +208,7 @@ def _infer_num_classes(dataset: Dataset) -> int:
 def _normalize_samples(
     samples: List[RAFSample],
 ) -> Tuple[List[RAFSample], int, dict]:
+    """Map RAF ids to canonical labels and drop unsupported classes."""
     if not samples:
         return samples, 0, {"fallback_used": 0}
     normalized = []
@@ -211,6 +217,7 @@ def _normalize_samples(
         label_id = sample.label
         name = RAF_LABEL_TO_NAME.get(label_id)
         if name is None:
+            # Some exports are zero-based; fallback keeps those files usable.
             name = RAF_LABEL_TO_NAME.get(label_id + 1)
             if name is not None:
                 fallback_used += 1
@@ -230,6 +237,7 @@ def _find_csv_files(
     train_csv: Optional[str],
     test_csv: Optional[str],
 ) -> Tuple[Optional[Path], Optional[Path]]:
+    """Resolve train/test CSVs with override args and common default locations."""
     if train_csv:
         train_path = Path(train_csv)
     else:
@@ -252,6 +260,7 @@ def _find_csv_files(
 
 
 def _find_csv_image_dir(root: Path, split: str) -> Path:
+    """Search common RAF image directory layouts for a given split."""
     candidates = [
         root / "DATASET" / split,
         root / split,
@@ -265,6 +274,7 @@ def _find_csv_image_dir(root: Path, split: str) -> Path:
 
 
 def _load_csv_samples(csv_path: Path, image_dir: Path) -> List[RAFSample]:
+    """Parse CSV rows defensively because field names vary across RAF exports."""
     samples: List[RAFSample] = []
     file_map: Optional[dict[str, Path]] = None
     with csv_path.open(newline="") as f:
@@ -305,6 +315,7 @@ def _resolve_csv_image_path(
     label: int,
     file_map: Optional[dict[str, Path]],
 ) -> Optional[Path]:
+    """Try likely RAF path templates before falling back to a filename index."""
     candidates = [
         image_dir / filename,
         image_dir / str(label) / filename,
@@ -322,6 +333,7 @@ def _resolve_csv_image_path(
 
 
 def _build_file_map(image_dir: Path) -> dict[str, Path]:
+    """Cache filename lookup once to avoid repeated recursive scans."""
     return {path.name: path for path in image_dir.rglob("*.jpg")}
 
 

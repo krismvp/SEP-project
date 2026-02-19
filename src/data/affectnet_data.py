@@ -10,6 +10,7 @@ from src.constants.emotions import CANON_6, CLASS_TO_IDX, normalize_emotion
 
 
 def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
+    """Find first existing split directory to tolerate dataset naming differences."""
     for name in names:
         candidate = root / name
         if candidate.is_dir():
@@ -18,6 +19,7 @@ def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
 
 
 def _resolve_affectnet_root(data_dir: str) -> Path:
+    """Resolve AffectNet root and fail early when expected structure is missing."""
     root = Path(data_dir)
     if _find_split_dir(root, ["train", "Train", "Training"]) is not None:
         return root
@@ -28,6 +30,7 @@ def _resolve_affectnet_root(data_dir: str) -> Path:
 
 
 class _MappedImageFolder(Dataset):
+    """ImageFolder wrapper that remaps AffectNet labels to CANON_6."""
     def __init__(self, base: datasets.ImageFolder, samples: list[tuple[str, int]]):
         self.loader = base.loader
         self.transform = base.transform
@@ -54,12 +57,14 @@ class _MappedImageFolder(Dataset):
 
 
 def _unwrap_subset(dataset: Dataset):
+    """Return base dataset plus optional index mask for subset-aware remapping."""
     if isinstance(dataset, Subset):
         return dataset.dataset, set(dataset.indices)
     return dataset, None
 
 
 def _map_affectnet_to_canon(dataset: datasets.ImageFolder) -> Dataset:
+    """Normalize label names and discard classes outside the shared 6-label setup."""
     base, indices = _unwrap_subset(dataset)
     if not hasattr(base, "samples") or not hasattr(base, "classes"):
         return dataset
@@ -69,6 +74,7 @@ def _map_affectnet_to_canon(dataset: datasets.ImageFolder) -> Dataset:
             continue
         class_name = base.classes[target]
         mapped = normalize_emotion(class_name)
+        # Mixed training expects 6-way labels, so non-canonical classes are filtered out.
         if mapped in {"neutral", "contempt"}:
             continue
         if mapped not in CLASS_TO_IDX:
@@ -78,6 +84,7 @@ def _map_affectnet_to_canon(dataset: datasets.ImageFolder) -> Dataset:
 
 
 def _split_indices(num_samples: int, val_split: float, seed: int):
+    """Create deterministic split indices for reproducible training/validation."""
     val_size = int(num_samples * val_split)
     if val_size <= 0:
         return list(range(num_samples)), []
@@ -98,6 +105,7 @@ def make_affectnet_loaders(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader]]:
+    """Build AffectNet loaders with canonical mapping and optional val/test loaders."""
     root = _resolve_affectnet_root(data_dir)
     train_root = _find_split_dir(root, ["train", "Train", "Training"])
     if train_root is None:

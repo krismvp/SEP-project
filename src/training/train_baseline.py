@@ -9,10 +9,12 @@ from models.baseline_cnn import SimpleCNN
 
 
 def train():
+    """Run a small baseline to establish a quick reference performance."""
     device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
     print("Using device:", device)
 
     transform = transforms.Compose([
+        # Keep preprocessing simple so the baseline stays easy to compare against later runs.
         transforms.Resize((64, 64)),
         transforms.ToTensor(),
         transforms.Normalize([0.5]*3, [0.5]*3)
@@ -29,6 +31,7 @@ def train():
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     for epoch in range(4):
+        # Few epochs are intentional here: this script is for fast sanity checks, not peak accuracy.
         model.train()
         correct, total = 0, 0
 

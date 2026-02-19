@@ -10,6 +10,7 @@ from torchvision import transforms
 
 
 class _ImageDataset(Protocol):
+    """Minimal dataset contract used by the SimCLR wrapper."""
     def __len__(self) -> int:
         ...
 
@@ -18,6 +19,7 @@ class _ImageDataset(Protocol):
 
 
 def _resolve_celeba_root(data_dir: str) -> Path:
+    """Support common CelebA folder layouts to reduce setup friction."""
     root = Path(data_dir)
     candidates = [
         root,
@@ -39,6 +41,7 @@ def _resolve_celeba_root(data_dir: str) -> Path:
 
 
 def _load_bbox_map(root: Path) -> Dict[str, Tuple[int, int, int, int]]:
+    """Load face boxes from CSV or TXT so both official formats are accepted."""
     csv_path = root / "list_bbox_celeba.csv"
     txt_path = root / "list_bbox_celeba.txt"
     bbox_map: Dict[str, Tuple[int, int, int, int]] = {}
@@ -70,6 +73,7 @@ def _load_bbox_map(root: Path) -> Dict[str, Tuple[int, int, int, int]]:
 
 
 def _load_partitions(root: Path) -> Dict[str, int]:
+    """Load split assignments if available; fallback to all images otherwise."""
     csv_path = root / "list_eval_partition.csv"
     txt_path = root / "list_eval_partition.txt"
     partitions: Dict[str, int] = {}
@@ -98,6 +102,7 @@ def _load_partitions(root: Path) -> Dict[str, int]:
 def _crop_with_padding(
     image: Image.Image, bbox: Tuple[int, int, int, int], padding: float
 ) -> Image.Image:
+    """Expand bounding boxes slightly so crops keep context around the face."""
     x1, y1, width, height = bbox
     if width <= 0 or height <= 0:
         return image
@@ -156,6 +161,7 @@ class CelebAUnlabeled(Dataset):
         return image
 
     def _filter_split(self, split: str) -> List[str]:
+        """Prefer official partitions, but keep an 'all' mode for quick experiments."""
         if split == "all" or not self.partitions:
             return [img_id for img_id in self.bbox_map.keys() if img_id in self.available_images]
         if split not in self._split_map:
@@ -179,11 +185,13 @@ class SimCLRDataset(Dataset):
         return self.base_dataset.__len__()
 
     def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
+        # Two stochastic views are required for contrastive positive pairs.
         img = self.base_dataset[index]
         return self.transform(img), self.transform(img)
 
 
 def build_ssl_transform(image_size: int = 64) -> transforms.Compose:
+    """Use stronger augmentations so invariances are learned during SSL pretraining."""
     return transforms.Compose(
         [
             transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
@@ -212,6 +220,7 @@ def make_ssl_loader(
     crop_faces: bool = True,
     face_padding: float = 0.1,
 ) -> DataLoader:
+    """Create SSL loader with face-cropped CelebA and paired SimCLR views."""
     base_dataset = CelebAUnlabeled(
         root=data_dir,
         split=split,

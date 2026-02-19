@@ -22,10 +22,12 @@ from src.training.train_utils import (
 
 
 def _unwrap_dataset(dataset: Dataset) -> Dataset:
+    """Normalize wrapped datasets so downstream checks work on the base dataset."""
     return dataset.dataset if isinstance(dataset, Subset) else dataset
 
 
 def _get_class_order(dataset: Dataset) -> list[str]:
+    """Recover deterministic class order to avoid silent label-mapping mismatches."""
     base = _unwrap_dataset(dataset)
     classes = getattr(base, "classes", None)
     if classes:
@@ -49,6 +51,7 @@ def _get_class_order(dataset: Dataset) -> list[str]:
 
 
 def _assert_canon6(dataset: Dataset, name: str) -> None:
+    """Fail fast when a dataset does not match the shared 6-class emotion taxonomy."""
     classes = _get_class_order(dataset)
     if classes != list(CANON_6):
         raise ValueError(f"{name} classes mismatch: {classes} vs {list(CANON_6)}")
@@ -59,6 +62,7 @@ def _safe_len(obj: object) -> int:
 
 
 class BalancedConcatSampler(Sampler[int]):
+    """Sample from multiple datasets with controllable domain and per-sample probabilities."""
     def __init__(
         self,
         datasets: Iterable[Dataset],
@@ -99,6 +103,7 @@ class BalancedConcatSampler(Sampler[int]):
         self.epoch = epoch
 
     def __iter__(self):
+        # Epoch-dependent seed keeps runs reproducible while still changing sampled items.
         gen = torch.Generator().manual_seed(self.seed + self.epoch)
         ds_ids = torch.multinomial(
             self.probs, self.num_samples, replacement=True, generator=gen
@@ -118,6 +123,7 @@ class BalancedConcatSampler(Sampler[int]):
 def _eval_loss_acc(
     model: nn.Module, loader: DataLoader, device: torch.device, criterion: nn.Module
 ) -> tuple[float, float]:
+    """Evaluate with train-compatible loss to keep selection metrics consistent."""
     model.eval()
     loss_sum = 0.0
     correct = 0
@@ -145,6 +151,7 @@ def _run_epoch(
     optimizer: Optional[torch.optim.Optimizer] = None,
     desc: str = "",
 ) -> tuple[float, Optional[float]]:
+    """Run one epoch with shared train/eval logic to keep behavior symmetric."""
     if train:
         model.train()
     else:
@@ -205,11 +212,13 @@ def train_mixed_ferplus_raf(
     selection_metric: str = "avg",
     output_dir: str = "outputs/mixed/ferplus_raf_resnet34_mtcnn",
 ):
+    """Train a single model on FER+ and RAF while explicitly balancing both domains."""
     set_seed(seed)
     device = get_device()
     print(f"Using device: {device}")
 
     if domain_probs is None:
+        # Equal domain mixing is a safe default when no prior domain weighting is desired.
         domain_probs = [0.5, 0.5]
     if len(domain_probs) != 2:
         raise ValueError("domain_probs must contain two probabilities: [FER, RAF].")
@@ -310,6 +319,7 @@ def train_mixed_ferplus_raf(
     if pretrained_path:
         _load_pretrained_backbone(model, pretrained_path)
     if backbone_lr is None:
+        # Conservative fine-tuning helps retain pretrained representation quality.
         backbone_lr = lr if pretrained_path is None else lr * 0.1
 
     optimizer = _build_optimizer(model, backbone_lr, lr, weight_decay)
@@ -335,6 +345,7 @@ def train_mixed_ferplus_raf(
     best_epoch = 0
     epochs_since_improve = 0
     min_delta = 0.05
+    # Mixed-domain validation can oscillate; patience should track only meaningful jumps.
 
     history: dict[str, Any] = {
         "epochs": [],
@@ -363,8 +374,10 @@ def train_mixed_ferplus_raf(
         val_loss_raf, val_acc_raf = _eval_loss_acc(model, raf_val, device, criterion)
         val_loss_avg = 0.5 * (val_loss_fer + val_loss_raf)
         if selection_metric == "min":
+            # "min" favors the weaker domain instead of rewarding imbalance.
             score = min(val_acc_fer, val_acc_raf)
         else:
+            # "avg" optimizes overall performance across both domains.
             score = 0.5 * (val_acc_fer + val_acc_raf)
 
         history["epochs"].append(epoch)

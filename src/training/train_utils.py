@@ -9,6 +9,7 @@ import torch.optim as optim
 
 
 def get_device() -> torch.device:
+    """Prefer CUDA/MPS automatically so training scripts keep one shared device policy."""
     if torch.cuda.is_available():
         return torch.device("cuda")
     if torch.backends.mps.is_available():
@@ -17,6 +18,7 @@ def get_device() -> torch.device:
 
 
 def infer_num_classes(dataset) -> int:
+    """Infer class count from common dataset wrappers used in our loaders."""
     if hasattr(dataset, "dataset") and hasattr(dataset.dataset, "classes"):
         return len(dataset.dataset.classes)
     if hasattr(dataset, "classes"):
@@ -25,12 +27,14 @@ def infer_num_classes(dataset) -> int:
 
 
 def set_seed(seed: int) -> None:
+    """Set all relevant torch seeds so experiments are reproducible enough to compare."""
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
 
 def _label_from_sample(sample: object) -> Optional[int]:
+    """Normalize different sample formats to one integer label extraction path."""
     label = getattr(sample, "label", None)
     if label is not None:
         return int(label)
@@ -40,6 +44,7 @@ def _label_from_sample(sample: object) -> Optional[int]:
 
 
 def _extract_labels(dataset) -> List[int]:
+    """Collect labels without assuming one specific dataset implementation."""
     if isinstance(dataset, torch.utils.data.Subset):
         base = dataset.dataset
         indices = list(dataset.indices)
@@ -88,6 +93,7 @@ def _extract_labels(dataset) -> List[int]:
 def _compute_class_weights(
     labels: List[int], num_classes: int, power: float = 1.0
 ) -> torch.Tensor:
+    """Use inverse-frequency weights with optional damping via `power`."""
     counts = torch.bincount(torch.tensor(labels, dtype=torch.long), minlength=num_classes)
     counts = counts.float().clamp_min(1.0)
     weights = counts.sum() / (num_classes * counts)
@@ -97,6 +103,7 @@ def _compute_class_weights(
 
 
 def _load_pretrained_backbone(model: nn.Module, checkpoint_path: str) -> None:
+    """Load reusable backbone weights while intentionally skipping classifier head params."""
     state = torch.load(checkpoint_path, map_location="cpu")
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
@@ -116,6 +123,7 @@ def _load_pretrained_backbone(model: nn.Module, checkpoint_path: str) -> None:
 
 
 def _adapt_conv1(state: Dict[str, torch.Tensor], in_channels: int) -> Dict[str, torch.Tensor]:
+    """Adapt first-layer channels so RGB and grayscale checkpoints stay interoperable."""
     weight = state["conv1.weight"]
     if weight.shape[1] == in_channels:
         return state
@@ -129,6 +137,7 @@ def _adapt_conv1(state: Dict[str, torch.Tensor], in_channels: int) -> Dict[str, 
 
 
 def _get_conv1_in_channels(model: nn.Module) -> int:
+    """Read expected input channels from the canonical first conv layer."""
     conv1 = getattr(model, "conv1", None)
     if isinstance(conv1, nn.Conv2d):
         return int(conv1.in_channels)
@@ -136,12 +145,14 @@ def _get_conv1_in_channels(model: nn.Module) -> int:
 
 
 def _freeze_backbone(model: nn.Module) -> None:
+    """Freeze non-classifier layers for head-only warmup/fine-tuning phases."""
     for name, param in model.named_parameters():
         if not name.startswith("fc"):
             param.requires_grad = False
 
 
 def _unfreeze_backbone(model: nn.Module) -> None:
+    """Re-enable full-model training after any temporary backbone freeze."""
     for param in model.parameters():
         param.requires_grad = True
 
@@ -152,6 +163,7 @@ def _build_optimizer(
     head_lr: float,
     weight_decay: float,
 ) -> torch.optim.Optimizer:
+    """Create split LR groups so new heads can learn faster than pretrained backbones."""
     backbone_params = []
     head_params = []
     for name, param in model.named_parameters():

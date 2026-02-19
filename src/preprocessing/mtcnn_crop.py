@@ -7,12 +7,14 @@ import torch
 
 
 def _get_resample():
+    """Prefer modern Pillow enum while staying backward compatible with older versions."""
     if hasattr(Image, "Resampling"):
         return Image.Resampling.BILINEAR
     return Image.BILINEAR
 
 
 def _center_crop(img: Image.Image) -> Image.Image:
+    """Fallback crop used when face detection is unavailable or invalid."""
     width, height = img.size
     side = min(width, height)
     left = (width - side) // 2
@@ -21,6 +23,7 @@ def _center_crop(img: Image.Image) -> Image.Image:
 
 
 class MTCNNCrop:
+    """Detect and crop the dominant face, with robust fallback to center crop."""
     def __init__(self, image_size: int = 64, margin: float = 0.25, device: Optional[str] = None):
         self.image_size = image_size
         self.margin = max(0.0, margin)
@@ -33,10 +36,12 @@ class MTCNNCrop:
                 "Install it with: python -m pip install -r requirements.txt"
             ) from exc
         self.mtcnn = MTCNN(keep_all=True, device=self.device)
+        # keep_all=True lets us pick the largest face, which is usually the primary subject.
         self.mtcnn.eval()
         self._resample = _get_resample()
 
     def _largest_bbox(self, boxes) -> Optional[Tuple[float, float, float, float]]:
+        """Pick the largest detected face to reduce background-person bias."""
         if boxes is None or len(boxes) == 0:
             return None
         areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -44,6 +49,7 @@ class MTCNNCrop:
         return tuple(float(v) for v in boxes[idx])
 
     def __call__(self, img: Image.Image) -> Image.Image:
+        """Apply face crop and resize; degrade gracefully when detection fails."""
         if not isinstance(img, Image.Image):
             return img
         base = img
@@ -51,6 +57,7 @@ class MTCNNCrop:
             base = base.convert("RGB")
         width, height = base.size
         with torch.no_grad():
+            # Inference-only path keeps preprocessing lightweight and deterministic.
             boxes, _ = self.mtcnn.detect(base)
         bbox = self._largest_bbox(boxes)
         if bbox is None:
@@ -70,6 +77,7 @@ class MTCNNCrop:
         y2 = min(float(height), y2)
 
         if x2 <= x1 or y2 <= y1:
+            # Invalid boxes can occur at image borders; safe fallback avoids hard failures.
             return _center_crop(base).resize((self.image_size, self.image_size), self._resample)
 
         cropped = base.crop((int(x1), int(y1), int(x2), int(y2)))

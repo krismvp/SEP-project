@@ -44,6 +44,7 @@ class ResNet18(nn.Module):
         self.fc = nn.Linear(base_channels * 8 * BasicBlock.expansion, num_classes)
 
     def _make_layer(self, block, out_channels: int, num_blocks: int, stride: int):
+        """Build one stage while downsampling only in the first block when needed."""
         # First block may downsample (stride>1). Remaining blocks keep stride=1.
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
@@ -56,6 +57,7 @@ class ResNet18(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run feature extraction then global pooling to support variable spatial sizes."""
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)

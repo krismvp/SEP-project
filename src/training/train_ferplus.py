@@ -20,6 +20,7 @@ from src.training.train_utils import (
 
 
 def _get_class_names(dataset, num_classes: int) -> list[str]:
+    """Return stable class names for logging, even for wrapped datasets."""
     if hasattr(dataset, "dataset"):
         dataset = dataset.dataset
     classes = getattr(dataset, "classes", None)
@@ -38,6 +39,7 @@ def _run_epoch(
     desc: str = "",
     debug_state: Optional[dict] = None,
 ) -> tuple[float, float]:
+    """Use one loop for train and val so both phases stay behaviorally aligned."""
     if train:
         model.train()
     else:
@@ -52,6 +54,7 @@ def _run_epoch(
         iterator = tqdm(loader, desc=desc) if desc else loader
         for imgs, labels in iterator:
             if debug_state is not None and not debug_state.get("printed", False):
+                # Printed once to catch shape/range issues early without noisy logs each step.
                 print("conv1:", tuple(model.conv1.weight.shape))
                 print("batch:", tuple(imgs.shape))
                 print("batch_dtype:", imgs.dtype)
@@ -105,6 +108,7 @@ def train_ferplus(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ):
+    """Train FER+ with optional pretraining and class-imbalance controls."""
     set_seed(seed)
     device = get_device()
     print(f"Using device: {device}")
@@ -141,6 +145,7 @@ def train_ferplus(
             labels, num_classes=num_classes, power=class_weight_power
         )
     if use_weighted_sampler and class_weights is not None:
+        # Oversampling avoids throwing away rare classes while keeping batch size unchanged.
         sample_weights = [class_weights[label].item() for label in labels]
         sampler = WeightedRandomSampler(
             weights=sample_weights,
@@ -166,6 +171,7 @@ def train_ferplus(
         criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     if backbone_lr is None:
+        # Lower backbone LR after loading pretrained features to avoid destroying them.
         backbone_lr = lr if pretrained_path is None else lr * 0.1
 
     optimizer = _build_optimizer(model, backbone_lr, lr, weight_decay)
@@ -179,6 +185,7 @@ def train_ferplus(
     best_epoch = 0
     epochs_since_improve = 0
     min_delta = 1e-4
+    # FER+ val loss tends to move in small steps; a small threshold keeps early stop stable.
     printed_debug = False
 
     os.makedirs(output_dir, exist_ok=True)
@@ -217,6 +224,7 @@ def train_ferplus(
         )
 
         if val_loss < best_val_loss - min_delta:
+            # Loss is used for model selection because it is smoother than accuracy.
             best_val_loss = val_loss
             best_val_acc = val_acc
             best_epoch = epoch + 1

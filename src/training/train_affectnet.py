@@ -23,6 +23,7 @@ from src.training.train_utils import (
 def _eval_loss_acc(
     model: nn.Module, loader: DataLoader, device: torch.device, criterion: nn.Module
 ) -> tuple[float, float]:
+    """Evaluate with the same objective as training to keep metrics directly comparable."""
     model.eval()
     loss_sum = 0.0
     correct = 0
@@ -50,6 +51,7 @@ def _run_epoch(
     optimizer: Optional[torch.optim.Optimizer] = None,
     desc: str = "",
 ) -> tuple[float, Optional[float]]:
+    """Run one pass in train/eval mode through a shared code path to reduce drift."""
     if train:
         model.train()
     else:
@@ -105,6 +107,7 @@ def train_affectnet(
     mtcnn_device: str | None,
     output_dir: str,
 ) -> Dict[str, List[float]]:
+    """Train AffectNet with optional imbalance handling and early stopping."""
     set_seed(seed)
     device = get_device()
     print(f"Using device: {device}")
@@ -130,6 +133,7 @@ def train_affectnet(
     class_weights = None
     labels = None
     if use_class_weight_power and (weighted_sampler or not no_weighted_loss):
+        # We only pay the cost of label extraction when weights are needed.
         labels = _extract_labels(train_loader.dataset)
         if labels:
             class_weights = _compute_class_weights(
@@ -185,6 +189,7 @@ def train_affectnet(
     best_epoch = 0
     epochs_since_improve = 0
     min_delta = 0.05
+    # Small fluctuations are common; patience should react to meaningful gains only.
     best_path = os.path.join(output_dir, f"{arch}_best.pth")
 
     history = {

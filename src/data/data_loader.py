@@ -1,10 +1,11 @@
 import torch
 from torch.utils.data import DataLoader, Subset, random_split
 from torchvision import datasets
-
 from .transforms import fer_train_transforms, fer_eval_transforms
 
+
 def make_fer_loaders(data_path, batch_size=64, val_split=0.1, seed=42):
+    """Create a simple FER train/val split for baseline experiments."""
     base_dataset = datasets.ImageFolder(root=f"{data_path}/train")
     train_size = int((1 - val_split) * len(base_dataset))
     val_size = len(base_dataset) - train_size
@@ -45,6 +46,7 @@ def make_fer_loaders(data_path, batch_size=64, val_split=0.1, seed=42):
     return train_loader, val_loader
   
 if __name__ == "__main__":
-        train_loader, val_loader = make_fer_loaders("data/FER13")
-        images, labels = next(iter(train_loader))
-        print(f"Batch-Shape: {images.shape}")
+    # Quick sanity check to verify shapes and transforms when run directly.
+    train_loader, val_loader = make_fer_loaders("data/FER13")
+    images, labels = next(iter(train_loader))
+    print(f"Batch-Shape: {images.shape}")
