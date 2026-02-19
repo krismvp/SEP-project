@@ -21,6 +21,7 @@ from src.training.train_utils import (
 
 
 def _safe_len(obj: object) -> int:
+    """Avoid hard failures when loaders expose objects without __len__."""
     return len(obj) if isinstance(obj, Sized) else 0
 
 
@@ -35,6 +36,7 @@ def _run_epoch(
     desc: str = "",
     debug_state: Optional[dict] = None,
 ) -> Tuple[float, float]:
+    """Share train/val loop logic to keep both phases behaviorally consistent."""
     if train:
         model.train()
     else:
@@ -50,6 +52,7 @@ def _run_epoch(
             iterator = tqdm(loader, desc=desc, leave=False)
             for step, (images, labels) in enumerate(iterator, start=1):
                 if debug_state is not None and not debug_state.get("printed", False):
+                    # One-time debug print helps catch input/model mismatches early.
                     print("conv1:", tuple(model.conv1.weight.shape))
                     print("batch:", tuple(images.shape))
                     print("batch_dtype:", images.dtype)
@@ -134,6 +137,7 @@ def train_raf(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ) -> Dict[str, List[float]]:
+    """Train RAF with optional pretraining and imbalance-aware sampling/loss."""
     set_seed(seed)
     device = get_device()
     print(f"Using device: {device}")
@@ -171,6 +175,7 @@ def train_raf(
             labels, num_classes=num_classes, power=class_weight_power
         )
     if use_weighted_sampler and class_weights is not None:
+        # Oversampling keeps rare classes present without discarding common examples.
         sample_weights = [class_weights[label].item() for label in labels]
         sampler = WeightedRandomSampler(
             weights=sample_weights,
@@ -196,6 +201,7 @@ def train_raf(
         criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     if backbone_lr is None:
+        # Smaller LR for pretrained backbones helps preserve useful pretrained features.
         backbone_lr = lr if pretrained_path is None else lr * 0.1
 
     optimizer = _build_optimizer(model, backbone_lr, lr, weight_decay)
@@ -205,6 +211,7 @@ def train_raf(
     best_epoch = 0
     epochs_since_improve = 0
     min_delta = 1e-4
+    # Validation loss often moves slightly; patience should ignore tiny noise.
     os.makedirs(output_dir, exist_ok=True)
     best_path = os.path.join(output_dir, f"{arch}_finetune_best.pth")
 
@@ -261,6 +268,7 @@ def train_raf(
 
         if val_loader is not None:
             if val_loss < best_val_loss - min_delta:
+                # Loss is used for selection because it is usually less jumpy than accuracy.
                 best_val_loss = val_loss
                 best_val_acc = val_acc
                 best_epoch = epoch
