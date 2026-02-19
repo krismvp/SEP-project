@@ -9,12 +9,14 @@ import torch.nn.functional as F
 
 @dataclass
 class GradCAMResult:
+    """Container keeps visualization output and prediction context together."""
     cam: torch.Tensor          # (H, W) in [0,1] on CPU
     class_idx: int
     logits: torch.Tensor       # (num_classes,) on CPU
 
 
 def _find_last_conv2d(model: nn.Module) -> nn.Conv2d:
+    """Default to the last conv layer because it is most class-discriminative."""
     last = None
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
@@ -52,11 +54,13 @@ class GradCAM:
         self._h2 = self.target_layer.register_full_backward_hook(bwd_hook)
 
     def close(self) -> None:
+        """Remove hooks explicitly to prevent stale references in long sessions."""
         self._h1.remove()
         self._h2.remove()
 
     @torch.no_grad()
     def _infer_logits(self, x: torch.Tensor) -> torch.Tensor:
+        """Utility inference path for callers that only need logits."""
         return self.model(x)
 
     def __call__(self, x: torch.Tensor, class_idx: Optional[int] = None) -> GradCAMResult:
@@ -77,6 +81,7 @@ class GradCAM:
             class_idx = int(logits.argmax(dim=1).item())
 
         score = logits[0, class_idx]
+        # Backprop only the selected class score to get class-specific saliency.
         score.backward(retain_graph=False)
 
         if self._activations is None or self._gradients is None:
