@@ -4,8 +4,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use("Agg")
+matplotlib.use("Agg")  
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -14,6 +13,7 @@ sys.path.append(str(ROOT))
 
 
 def main() -> None:
+    """Main training function: Parse arguments, run AffectNet training, and plot results."""
     parser = argparse.ArgumentParser(
         description="Train on AffectNet (ImageFolder format)."
     )
@@ -103,7 +103,6 @@ def main() -> None:
     fig.tight_layout()
     fig.savefig(os.path.join(args.output_dir, "training_curves.png"), dpi=150)
     plt.close(fig)
-
 
 if __name__ == "__main__":
     main()

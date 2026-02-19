@@ -4,8 +4,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use("Agg")
+matplotlib.use("Agg")  
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -18,6 +17,7 @@ from src.training.train_mixed_ferplus_raf import train_mixed_ferplus_raf
 
 
 def main() -> None:
+    """Main training function: Train emotion recognition model on mixed FER+ and RAF-DB domains."""
     parser = argparse.ArgumentParser(
         description="Train a mixed-domain FER+ + RAF model with balanced sampling."
     )
@@ -50,8 +50,14 @@ def main() -> None:
         nargs=2,
         default=[0.5, 0.5],
         metavar=("FER", "RAF"),
+        help="Sampling probability for FER+ and RAF-DB per batch",
     )
-    parser.add_argument("--selection-metric", choices=["avg", "min"], default="avg")
+    parser.add_argument(
+        "--selection-metric",
+        choices=["avg", "min"],
+        default="avg",
+        help="Metric for selecting best model: avg (average of both domains) or min (minimum of both)",
+    )
     parser.add_argument(
         "--output-dir",
         default="outputs/mixed/ferplus_raf_resnet34_mtcnn",
@@ -122,7 +128,6 @@ def main() -> None:
         plt.tight_layout()
         plt.savefig(os.path.join(args.output_dir, "loss_curves.png"), dpi=150)
         plt.close()
-
 
 
 if __name__ == "__main__":

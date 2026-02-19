@@ -5,7 +5,7 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")
+matplotlib.use("Agg")  
 import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,34 +15,35 @@ from src.training.train_raf import train_raf
 
 
 def main() -> None:
+    """Main training function: Train or fine-tune emotion recognition model on RAF-DB dataset."""
     parser = argparse.ArgumentParser(
         description="Train or fine-tune ResNet-18 on RAF-DB."
     )
-    parser.add_argument("--data-dir", default="data/RAF-DB")
-    parser.add_argument("--pretrained-path", type=str, default=None)
-    parser.add_argument("--output-dir", default="outputs/finetune")
+    parser.add_argument("--data-dir", default="data/RAF-DB", help="Path to RAF-DB dataset root directory")
+    parser.add_argument("--pretrained-path", type=str, default=None, help="Path to pretrained model for transfer learning")
+    parser.add_argument("--output-dir", default="outputs/finetune", help="Directory to save checkpoints and curves")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=25)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--backbone-lr", type=float, default=None)
-    parser.add_argument("--weight-decay", type=float, default=1e-4)
-    parser.add_argument("--val-split", type=float, default=0.1)
-    parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--image-size", type=int, default=64)
-    parser.add_argument("--log-interval", type=int, default=50)
-    parser.add_argument("--train-csv", type=str, default=None)
-    parser.add_argument("--test-csv", type=str, default=None)
-    parser.add_argument("--image-dir", type=str, default=None)
-    parser.add_argument("--weighted-sampler", action="store_true")
-    parser.add_argument("--no-weighted-loss", action="store_true")
-    parser.add_argument("--class-weight-power", type=float, default=0.5)
+    parser.add_argument("--log-interval", type=int, default=50, help="Log training progress every N batches")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate for head layers")
+    parser.add_argument("--backbone-lr", type=float, default=None, help="Different learning rate for backbone layers (transfer learning)")
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--label-smoothing", type=float, default=0.05)
+    parser.add_argument("--weighted-sampler", action="store_true", help="Use weighted sampling for class imbalance")
+    parser.add_argument("--no-weighted-loss", action="store_true", help="Disable weighted loss for imbalanced classes")
+    parser.add_argument("--class-weight-power", type=float, default=0.5, help="Power scaling for class weights")
+    parser.add_argument("--val-split", type=float, default=0.1, help="Fraction of training data to use for validation")
+    parser.add_argument("--patience", type=int, default=5, help="Early stopping patience (epochs without improvement)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
-    parser.add_argument("--use-mtcnn", action="store_true")
-    parser.add_argument("--mtcnn-margin", type=float, default=0.25)
-    parser.add_argument("--mtcnn-device", type=str, default="cpu")
+    parser.add_argument("--train-csv", type=str, default=None, help="Path to custom train CSV file")
+    parser.add_argument("--test-csv", type=str, default=None, help="Path to custom test CSV file")
+    parser.add_argument("--image-dir", type=str, default=None, help="Path to directory containing images")
+    parser.add_argument("--use-mtcnn", action="store_true", help="Enable MTCNN face detection preprocessing")
+    parser.add_argument("--mtcnn-margin", type=float, default=0.25, help="Margin around detected face for MTCNN crop")
+    parser.add_argument("--mtcnn-device", type=str, default="cpu", help="Device for MTCNN inference (cpu/cuda)")
     args = parser.parse_args()
 
     if args.use_mtcnn:
