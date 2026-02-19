@@ -5,8 +5,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use("Agg")
+matplotlib.use("Agg")  
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -15,16 +14,18 @@ from torch.utils.data import Subset
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-from src.constants.emotions import normalize_emotion
-from src.data.affectnet_data import make_affectnet_loaders
-from src.models.factory import build_model
+from src.constants.emotions import normalize_emotion  
+from src.data.affectnet_data import make_affectnet_loaders 
+from src.models.factory import build_model 
 
 
 def _unwrap_dataset(dataset):
+    """Extract the base dataset from potentially wrapped DataLoader objects."""
     return dataset.dataset if hasattr(dataset, "dataset") else dataset
 
 
 def _get_class_names(dataset, num_classes: int) -> list[str]:
+    """Retrieve class names from dataset, fallback to numeric indices if not available."""
     base = _unwrap_dataset(dataset)
     classes = getattr(base, "classes", None)
     if classes:
@@ -33,6 +34,7 @@ def _get_class_names(dataset, num_classes: int) -> list[str]:
 
 
 def _sample_to_path(sample) -> str:
+    """Extract file path from a dataset sample (supports multiple sample formats)."""
     if isinstance(sample, (list, tuple)) and sample:
         return str(sample[0])
     path = getattr(sample, "path", None)
@@ -42,6 +44,7 @@ def _sample_to_path(sample) -> str:
 
 
 def _extract_paths(dataset) -> list[str]:
+    """Extract all sample file paths from dataset for CSV export."""
     if isinstance(dataset, Subset):
         base = dataset.dataset
         indices = list(dataset.indices)
@@ -57,6 +60,7 @@ def _extract_paths(dataset) -> list[str]:
 
 
 def _pretty_label(name: str) -> str:
+    """Normalize emotion names to pretty-printed format for CSV headers."""
     norm = normalize_emotion(name)
     if norm == "happy":
         return "happiness"
@@ -68,6 +72,7 @@ def _pretty_label(name: str) -> str:
 def _resolve_pred_order(
     class_names: list[str], desired_order: list[str]
 ) -> tuple[list[str], list[int]]:
+    """Map desired prediction order to actual class indices. Returns CSV header and reordering indices."""
     norm_to_idx = {normalize_emotion(name): idx for idx, name in enumerate(class_names)}
     header: list[str] = []
     order_indices: list[int] = []
@@ -100,6 +105,7 @@ DEFAULT_PRED_ORDER = [
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
+    """Adapt conv1 layer from RGB (3-channel) to grayscale (1-channel) by averaging weights."""
     weight = state.get("conv1.weight")
     if isinstance(weight, torch.Tensor) and weight.ndim == 4:
         if int(weight.shape[1]) == 3:
@@ -108,6 +114,7 @@ def _adapt_conv1_to_grayscale(state: dict) -> dict:
 
 
 def main() -> None:
+    """Main evaluation function: Load model, evaluate on AffectNet dataset, save results."""
     parser = argparse.ArgumentParser(description="Evaluate AffectNet model on test set.")
     parser.add_argument("--data-dir", default="data/AffectNet")
     parser.add_argument("--weights", required=True, help="Path to checkpoint .pth")
@@ -143,6 +150,7 @@ def main() -> None:
     if not isinstance(state, dict):
         raise ValueError("Checkpoint must be a state_dict or contain a state_dict key.")
 
+
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     state = _adapt_conv1_to_grayscale(state)
     in_channels = 1
@@ -175,7 +183,7 @@ def main() -> None:
 
     model = build_model(args.arch, num_classes=num_classes, in_channels=in_channels).to(device)
     model.load_state_dict(state)
-    model.eval()
+    model.eval()  
 
     os.makedirs(args.output_dir, exist_ok=True)
     preds_path = os.path.join(args.output_dir, "predictions.csv")
@@ -194,7 +202,7 @@ def main() -> None:
         writer = csv.writer(csv_file)
         writer.writerow(["filepath"] + header)
 
-        with torch.no_grad():
+        with torch.no_grad():  
             for imgs, labels in eval_loader:
                 if not printed_debug:
                     print("conv1:", tuple(model.conv1.weight.shape))
@@ -203,12 +211,15 @@ def main() -> None:
                     print("batch_range:", (float(imgs.min()), float(imgs.max())))
                     print("class_names:", class_names)
                     printed_debug = True
+                
                 imgs, labels = imgs.to(device), labels.to(device)
                 outputs = model(imgs)
                 probs = torch.softmax(outputs, dim=1).detach().cpu().numpy()
                 preds = outputs.argmax(dim=1)
+                
                 correct += (preds == labels).sum().item()
                 total += labels.size(0)
+                
                 labels_cpu = labels.detach().cpu()
                 preds_cpu = preds.detach().cpu()
                 indices = labels_cpu * num_classes + preds_cpu
@@ -268,7 +279,6 @@ def main() -> None:
 
     print(f"Saved confusion matrix to: {cm_path}")
     print(f"Saved normalized confusion matrix to: {cm_norm_path}")
-
 
 if __name__ == "__main__":
     main()

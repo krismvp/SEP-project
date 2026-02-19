@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader, Dataset
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-from src.constants.emotions import CANON_6, normalize_emotion
-from src.data.transforms import fer_eval_transforms
-from src.models.factory import build_model
+from src.constants.emotions import CANON_6, normalize_emotion  
+from src.data.transforms import fer_eval_transforms  
+from src.models.factory import build_model  
 
 DEFAULT_PRED_ORDER = [
     "happiness",
@@ -28,6 +28,7 @@ DEFAULT_WEIGHTS = ROOT / "outputs/mixed/ferplus_raf_best_generalization/resnet34
 
 
 class FolderImageDataset(Dataset):
+    """Dataset for loading images from a folder and processing them for emotion classification."""
     def __init__(
         self,
         folder: str,
@@ -35,6 +36,7 @@ class FolderImageDataset(Dataset):
         recursive: bool = True,
         extensions: list[str] | None = None,
     ) -> None:
+        """Initialize the dataset."""
         self.root = Path(folder)
         if not self.root.is_dir():
             raise FileNotFoundError(f"Input folder not found: {self.root}")
@@ -63,10 +65,11 @@ class FolderImageDataset(Dataset):
         return len(self.paths)
 
     def __getitem__(self, index: int):
+        """Load and transform an image."""
         path = self.paths[index]
         try:
             with Image.open(path) as img:
-                img = img.convert("RGB")
+                img = img.convert("RGB")  
         except Exception as exc:
             raise RuntimeError(f"Failed to read image: {path}") from exc
         if self.transform is not None:
@@ -75,6 +78,7 @@ class FolderImageDataset(Dataset):
 
 
 def _normalize_ext(ext: str) -> str:
+    """Normalize file extension to lowercase with leading dot."""
     cleaned = ext.strip().lower()
     if not cleaned:
         raise ValueError("Empty extension is not allowed.")
@@ -84,12 +88,14 @@ def _normalize_ext(ext: str) -> str:
 
 
 def _strip_module_prefix(state: dict) -> dict:
+    """Remove 'module.' prefix from state_dict keys (from DataParallel models)."""
     if not state or not any(key.startswith("module.") for key in state):
         return state
     return {key.replace("module.", "", 1): value for key, value in state.items()}
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
+    """Adapt conv1 layer from RGB (3-channel) to grayscale (1-channel) by averaging weights."""
     weight = state.get("conv1.weight")
     if isinstance(weight, torch.Tensor) and weight.ndim == 4 and int(weight.shape[1]) == 3:
         state["conv1.weight"] = weight.mean(dim=1, keepdim=True)
@@ -97,6 +103,7 @@ def _adapt_conv1_to_grayscale(state: dict) -> dict:
 
 
 def _extract_state_dict(checkpoint) -> dict:
+    """Extract model state dictionary from checkpoint in various formats."""
     if isinstance(checkpoint, dict):
         for key in ("state_dict", "model_state_dict"):
             candidate = checkpoint.get(key)
@@ -108,6 +115,7 @@ def _extract_state_dict(checkpoint) -> dict:
 
 
 def _infer_num_classes(state: dict) -> int:
+    """Infer number of emotion classes from the model's fully connected layer."""
     fc_weight = state.get("fc.weight")
     if isinstance(fc_weight, torch.Tensor) and fc_weight.ndim == 2:
         return int(fc_weight.shape[0])
@@ -119,6 +127,7 @@ def _infer_num_classes(state: dict) -> int:
 def _resolve_pred_order(
     class_names: list[str], desired_order: list[str]
 ) -> tuple[list[str], list[int]]:
+    """Map desired prediction order to actual class indices for CSV export."""
     norm_to_idx = {normalize_emotion(name): idx for idx, name in enumerate(class_names)}
     header: list[str] = []
     order_indices: list[int] = []
@@ -135,6 +144,7 @@ def _resolve_pred_order(
 
 
 def _pick_device(name: str | None) -> torch.device:
+    """Select computation device (GPU, Apple Silicon, or CPU)."""
     if name:
         return torch.device(name)
     if torch.cuda.is_available():
@@ -145,6 +155,8 @@ def _pick_device(name: str | None) -> torch.device:
 
 
 def main() -> None:
+    """Main function: Load model, process images in folder, and export emotion predictions to CSV."""
+    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Run emotion classification on all images in a folder and export scores to CSV."
     )
@@ -214,7 +226,7 @@ def main() -> None:
 
     model = build_model(args.arch, num_classes=num_classes, in_channels=1).to(device)
     model.load_state_dict(state)
-    model.eval()
+    model.eval()  
 
     transform = fer_eval_transforms(
         image_size=args.image_size,
@@ -254,7 +266,6 @@ def main() -> None:
 
     print(f"Processed {total} images")
     print(f"CSV saved to: {output_path}")
-
 
 if __name__ == "__main__":
     main()

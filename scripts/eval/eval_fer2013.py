@@ -4,8 +4,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use("Agg")
+matplotlib.use("Agg")  
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -13,15 +12,17 @@ import torch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-from src.data.fer_data import make_fer_loaders
-from src.models.factory import build_model
+from src.data.fer_data import make_fer_loaders  
+from src.models.factory import build_model  
 
 
 def _unwrap_dataset(dataset):
+    """Extract the base dataset from potentially wrapped DataLoader objects."""
     return dataset.dataset if hasattr(dataset, "dataset") else dataset
 
 
 def _get_class_names(dataset, num_classes: int) -> list[str]:
+    """Retrieve class names from dataset, fallback to numeric indices if not available."""
     base = _unwrap_dataset(dataset)
     classes = getattr(base, "classes", None)
     if classes:
@@ -30,6 +31,7 @@ def _get_class_names(dataset, num_classes: int) -> list[str]:
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
+    """Adapt conv1 layer from RGB (3-channel) to grayscale (1-channel) by averaging weights."""
     weight = state.get("conv1.weight")
     if isinstance(weight, torch.Tensor) and weight.ndim == 4:
         if int(weight.shape[1]) == 3:
@@ -38,6 +40,7 @@ def _adapt_conv1_to_grayscale(state: dict) -> dict:
 
 
 def _strip_module_prefix(state: dict) -> dict:
+    """Remove 'module.' prefix from state_dict keys (from DataParallel models)."""
     if not state:
         return state
     if not any(k.startswith("module.") for k in state.keys()):
@@ -46,6 +49,7 @@ def _strip_module_prefix(state: dict) -> dict:
 
 
 def main() -> None:
+    """Main evaluation function: Load model, evaluate on FER2013 dataset, save confusion matrices."""
     parser = argparse.ArgumentParser(description="Evaluate FER2013 model.")
     parser.add_argument("--data-path", default="data/FER13")
     parser.add_argument("--weights", required=True, help="Path to checkpoint .pth")
@@ -103,14 +107,14 @@ def main() -> None:
 
     model = build_model(args.arch, num_classes=num_classes, in_channels=1).to(device)
     model.load_state_dict(state)
-    model.eval()
+    model.eval()  
 
     cm = torch.zeros((num_classes, num_classes), dtype=torch.int64)
     correct = 0
     total = 0
     printed_debug = False
 
-    with torch.no_grad():
+    with torch.no_grad():  
         for imgs, labels in eval_loader:
             if not printed_debug:
                 print("conv1:", tuple(model.conv1.weight.shape))
@@ -118,11 +122,14 @@ def main() -> None:
                 print("batch_dtype:", imgs.dtype)
                 print("batch_range:", (float(imgs.min()), float(imgs.max())))
                 printed_debug = True
+            
             imgs, labels = imgs.to(device), labels.to(device)
             outputs = model(imgs)
             preds = outputs.argmax(dim=1)
+            
             correct += (preds == labels).sum().item()
             total += labels.size(0)
+            
             labels_cpu = labels.detach().cpu()
             preds_cpu = preds.detach().cpu()
             indices = labels_cpu * num_classes + preds_cpu
@@ -180,9 +187,9 @@ def main() -> None:
     plt.close(fig_norm)
 
     np.savetxt(csv_norm_path, cm_norm * 100.0, delimiter=",", fmt="%.2f")
+    # Print output file locations
     print(f"Saved confusion matrix to: {cm_path}")
     print(f"Saved normalized confusion matrix to: {cm_norm_path}")
-
 
 if __name__ == "__main__":
     main()
