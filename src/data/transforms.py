@@ -9,6 +9,7 @@ Transform = Callable[[Any], Any]
 def _maybe_mtcnn_ops(
     use_mtcnn: bool, image_size: int, mtcnn_margin: float, mtcnn_device: str | None
 ) -> list[Transform]:
+    """Inject face-crop preprocessing only when explicitly enabled."""
     if not use_mtcnn:
         return []
     from src.preprocessing.mtcnn_crop import MTCNNCrop
@@ -17,6 +18,7 @@ def _maybe_mtcnn_ops(
 
 
 def _fer_norm_stats():
+    """Keep one normalization source so train/eval pipelines stay aligned."""
     return [0.5], [0.5]
 
 
@@ -27,6 +29,7 @@ def fer_train_transforms(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ):
+    """Build FER-family training transforms with optional MTCNN face cropping."""
     mean, std = _fer_norm_stats()
     # basic (previous spec): Grayscale -> RRC(scale=0.9-1.0) -> HFlip -> Rotation(10)
     if augmentation not in {"basic", "strong"}:
@@ -64,12 +67,14 @@ def fer_eval_transforms(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ):
+    """Build deterministic eval transforms to reduce validation noise."""
     mean, std = _fer_norm_stats()
     ops: list[Transform] = _maybe_mtcnn_ops(
         use_mtcnn, image_size, mtcnn_margin, mtcnn_device
     )
     ops.append(transforms.Grayscale(num_output_channels=1))
     if not use_mtcnn:
+        # Without MTCNN we force fixed-size inputs here instead of relying on crop outputs.
         ops.append(transforms.Resize((image_size, image_size)))
     ops.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     return transforms.Compose(ops)
@@ -80,6 +85,7 @@ def raf_train_transforms(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ):
+    """Use the same augmentation recipe as FER to keep cross-dataset behavior comparable."""
     mean, std = _fer_norm_stats()
     ops: list[Transform] = _maybe_mtcnn_ops(
         use_mtcnn, image_size, mtcnn_margin, mtcnn_device
@@ -104,6 +110,7 @@ def raf_eval_transforms(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ):
+    """Mirror FER eval preprocessing for consistent RAF validation/test behavior."""
     mean, std = _fer_norm_stats()
     ops: list[Transform] = _maybe_mtcnn_ops(
         use_mtcnn, image_size, mtcnn_margin, mtcnn_device

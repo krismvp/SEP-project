@@ -10,6 +10,7 @@ from src.constants.emotions import CANON_6, CLASS_TO_IDX, normalize_emotion
 
 
 def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
+    """Find first matching split directory to tolerate naming variants."""
     for name in names:
         candidate = root / name
         if candidate.is_dir():
@@ -18,6 +19,7 @@ def _find_split_dir(root: Path, names: list[str]) -> Optional[Path]:
 
 
 def _resolve_ferplus_root(data_dir: str) -> Path:
+    """Resolve FER+ root across direct and nested extraction layouts."""
     root = Path(data_dir)
     if _find_split_dir(root, ["train", "Training"]) is not None:
         return root
@@ -31,6 +33,7 @@ def _resolve_ferplus_root(data_dir: str) -> Path:
 
 
 class _MappedImageFolder(Dataset):
+    """ImageFolder view with labels remapped to the shared CANON_6 taxonomy."""
     def __init__(self, base: datasets.ImageFolder, samples: list[tuple[str, int]]):
         self.loader = base.loader
         self.transform = base.transform
@@ -57,12 +60,14 @@ class _MappedImageFolder(Dataset):
 
 
 def _unwrap_subset(dataset: Dataset):
+    """Expose underlying dataset and optional index filter for remapping."""
     if isinstance(dataset, Subset):
         return dataset.dataset, set(dataset.indices)
     return dataset, None
 
 
 def _map_ferplus_to_canon(dataset: datasets.ImageFolder) -> Dataset:
+    """Drop unsupported labels and normalize class names to canonical indices."""
     base, indices = _unwrap_subset(dataset)
     if not hasattr(base, "samples") or not hasattr(base, "classes"):
         return dataset
@@ -72,6 +77,7 @@ def _map_ferplus_to_canon(dataset: datasets.ImageFolder) -> Dataset:
             continue
         class_name = base.classes[target]
         mapped = normalize_emotion(class_name)
+        # Neutral/contempt are intentionally excluded to keep 6-class training aligned.
         if mapped in {"neutral", "contempt"}:
             continue
         if mapped not in CLASS_TO_IDX:
@@ -81,6 +87,7 @@ def _map_ferplus_to_canon(dataset: datasets.ImageFolder) -> Dataset:
 
 
 def _split_indices(num_samples: int, val_split: float, seed: int):
+    """Create deterministic train/val split for reproducible comparisons."""
     val_size = int(num_samples * val_split)
     if val_size <= 0:
         return list(range(num_samples)), []
@@ -101,6 +108,7 @@ def make_ferplus_loaders(
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader]]:
+    """Build FER+ loaders with canonical label mapping and optional explicit val/test."""
     root = _resolve_ferplus_root(data_dir)
     train_root = _find_split_dir(root, ["train", "Training"])
     if train_root is None:
