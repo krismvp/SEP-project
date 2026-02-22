@@ -12,25 +12,25 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## For Correctors (Run This First)
+## For Correctors
 
 Please test these two scripts:
 
-1. `process_video` (required)
+1. `process_video`
 ```bash
 python3 scripts/demo/process_video.py
 ```
-- Put test videos in `inputdata/` (file picker opens there by default).
+- You can pick a video from any location; the file picker just starts in `inputdata/` by default.
 - Put checkpoint at `inference/resnet34_best.pth`.
-- Output video is saved to `inference/processed_<original_filename>`.
+- Output video is saved to `outputs/processed_<original_filename>`.
 
 2. `predict_folder` (required)
 ```bash
 python3 scripts/eval/predict_folder.py
 ```
-- Default input folder: `inputdata/`
-- Default checkpoint: `inference/resnet34_best.pth`
-- Default CSV output: `inference/folder_predictions.csv`
+- Put input folder: `inputdata/`
+- Put checkpoint at `inference/resnet34_best.pth`.
+- Default CSV output: `outputs/folder_predictions.csv`
 - Shows a live `tqdm` progress bar while running.
 
 ## Repository Layout
@@ -42,8 +42,8 @@ python3 scripts/eval/predict_folder.py
 - `src/models/`: model implementations and factory.
 - `src/training/`: training loops and utilities.
 - `inputdata/`: default inputs for inference demos.
-- `inference/`: default checkpoint and inference outputs.
-- `outputs/`: training/evaluation artifacts.
+- `inference/`: default checkpoint location.
+- `outputs/`: training/evaluation/inference artifacts.
 
 ## Data Layout
 
@@ -185,7 +185,7 @@ Explicit run:
 ```bash
 python3 scripts/eval/predict_folder.py inputdata \
   --weights inference/resnet34_best.pth \
-  --output-csv inference/folder_predictions.csv
+  --output-csv outputs/folder_predictions.csv
 ```
 
 ### Video Processing Demo
@@ -202,8 +202,8 @@ Default checkpoint path for live demo:
 
 ## Outputs
 
-- Inference CSV: `inference/folder_predictions.csv`
-- Processed video: `inference/processed_<original_filename>`
+- Inference CSV: `outputs/folder_predictions.csv`
+- Processed video: `outputs/processed_<original_filename>`
 - Training/evaluation artifacts: under `outputs/` and custom `--output-dir` values.
 - Different experiments are saved in separate subfolders under `outputs/` so you can review and compare results across runs.
 

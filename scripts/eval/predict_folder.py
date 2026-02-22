@@ -174,7 +174,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-csv",
-        default="inference/folder_predictions.csv",
+        default="outputs/folder_predictions.csv",
         help="Output CSV path.",
     )
     parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet34")

@@ -142,7 +142,7 @@ def process_video(input_path, output_path):
 if __name__ == "__main__":
     # OS-Native file picker for cross-platform usability
     input_dir = os.path.abspath(os.path.join(BASE_DIR, "../../inputdata"))
-    output_dir = os.path.abspath(os.path.join(BASE_DIR, "../../inference"))
+    output_dir = os.path.abspath(os.path.join(BASE_DIR, "../../outputs"))
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
