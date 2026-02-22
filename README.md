@@ -3,6 +3,13 @@
 Emotion recognition project with ResNet backbones on a shared 6-class label space:
 `anger`, `disgust`, `fear`, `happy`, `sad`, `surprise`.
 
+## Submission
+
+- Inference Path: `inference/resnet34_best.pth`
+- Final Report: included in the submission package.
+- Training Code: `src/training/`
+**Important:** This repository is fully set up, and the best model checkpoint is **already committed** at `inference/resnet34_best.pth`.
+
 ## Setup
 
 ```bash
@@ -21,7 +28,7 @@ Please test these two scripts:
 python3 scripts/demo/process_video.py
 ```
 - You can pick a video from any location; the file picker just starts in `inputdata/` by default.
-- Put checkpoint at `inference/resnet34_best.pth`.
+- Default checkpoint at `inference/resnet34_best.pth`.
 - Output video is saved to `outputs/processed_<original_filename>`.
 
 2. `predict_folder` (required)
@@ -29,7 +36,7 @@ python3 scripts/demo/process_video.py
 python3 scripts/eval/predict_folder.py
 ```
 - Put input folder: `inputdata/`
-- Put checkpoint at `inference/resnet34_best.pth`.
+- Default checkpoint at `inference/resnet34_best.pth`.
 - Default CSV output: `outputs/folder_predictions.csv`
 - Shows a live `tqdm` progress bar while running.
 

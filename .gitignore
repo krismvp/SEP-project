@@ -1,6 +1,7 @@
 /data/*
 !/data/.gitkeep
 *.pth
+!inference/resnet34_best.pth
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
