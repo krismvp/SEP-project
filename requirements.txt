@@ -7,9 +7,7 @@ torchvision
 
 # data & utils
 opencv-python<4.12
-scikit-learn
 tqdm
-pyyaml
 pillow
 
 # visualization
