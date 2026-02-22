@@ -3,6 +3,15 @@
 Emotion recognition project with ResNet backbones on a shared 6-class label space:
 `anger`, `disgust`, `fear`, `happy`, `sad`, `surprise`.
 
+## Setup
+
+```bash
+conda create -n sep_py311 python=3.11 -y
+conda activate sep_py311
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
 ## For Correctors (Run This First)
 
 Please test these two scripts:
@@ -23,15 +32,6 @@ python3 scripts/eval/predict_folder.py
 - Default checkpoint: `inference/resnet34_best.pth`
 - Default CSV output: `inference/folder_predictions.csv`
 - Shows a live `tqdm` progress bar while running.
-
-## Setup
-
-```bash
-conda create -n sep_py311 python=3.11 -y
-conda activate sep_py311
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
 
 ## Repository Layout
 
@@ -88,15 +88,30 @@ Notes:
 
 ## Training
 
+### Default Settings (Our Opinion)
+These are our project-wide default settings across all training scripts (AffectNet, FER+, RAF, and mixed):
+
+- `arch`: `resnet34`
+- `epochs`: `30`
+- `batch-size`: `32`
+- `lr`: `3e-4`
+- `weight-decay`: `1e-4`
+- `augmentation`: `strong`
+- `patience`: `4`
+- `weighted-sampler`: enabled by default
+- `class-weight-power`: `0.2`
+- `num-workers`: `0`
+- `label-smoothing`: `0.05`
+
+For trying different things, override flags and go for it.
+
 ### Mixed AffectNet + FER+ + RAF
 ```bash
 python3 scripts/train/train_mixed_affectnet_ferplus_raf.py \
   --affectnet-dir data/AffectNet \
   --fer-data-dir data/ferplus \
   --raf-data-dir data/RAF-DB \
-  --arch resnet34 \
-  --epochs 25 \
-  --output-dir outputs/mixed/affectnet_ferplus_raf_resnet34_mtcnn
+  --output-dir outputs/mixed/affectnet_ferplus_raf_best_generalization
 ```
 
 ### Mixed FER+ + RAF
@@ -104,25 +119,29 @@ python3 scripts/train/train_mixed_affectnet_ferplus_raf.py \
 python3 scripts/train/train_mixed_ferplus_raf.py \
   --fer-data-dir data/ferplus \
   --raf-data-dir data/RAF-DB \
-  --arch resnet34 \
-  --epochs 25 \
-  --output-dir outputs/mixed/ferplus_raf_resnet34_mtcnn
+  --output-dir outputs/mixed/ferplus_raf_best_generalization
 ```
 
 ### Single Dataset
 FER+:
 ```bash
-python3 scripts/train/train_ferplus.py --data-dir data/ferplus --epochs 20
+python3 scripts/train/train_ferplus.py \
+  --data-dir data/ferplus \
+  --output-dir outputs/ferplus/ferplus_best_generalization
 ```
 
 RAF-DB:
 ```bash
-python3 scripts/train/train_raf.py --data-dir data/RAF-DB --epochs 25
+python3 scripts/train/train_raf.py \
+  --data-dir data/RAF-DB \
+  --output-dir outputs/finetune/raf_best_generalization
 ```
 
 AffectNet:
 ```bash
-python3 scripts/train/train_affectnet.py --data-dir data/AffectNet --epochs 8
+python3 scripts/train/train_affectnet.py \
+  --data-dir data/AffectNet \
+  --output-dir outputs/pretrain/affectnet_best_generalization
 ```
 
 ## Evaluation
@@ -186,6 +205,7 @@ Default checkpoint path for live demo:
 - Inference CSV: `inference/folder_predictions.csv`
 - Processed video: `inference/processed_<original_filename>`
 - Training/evaluation artifacts: under `outputs/` and custom `--output-dir` values.
+- Different experiments are saved in separate subfolders under `outputs/` so you can review and compare results across runs.
 
 ## Notes
 

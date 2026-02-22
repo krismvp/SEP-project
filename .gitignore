@@ -1,8 +1,5 @@
 /data/
 *.pth
-outputs/**/*confusion_matrix*.png
-outputs/**/*confusion_matrix*.csv
-outputs/**/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
