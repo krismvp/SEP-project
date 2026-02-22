@@ -92,6 +92,7 @@ data/RAF-DB/
 Notes:
 - Loaders map labels to canonical 6 classes and drop unsupported labels (for example neutral/contempt where applicable).
 - If an explicit validation split is missing, loaders can create one with `--val-split`.
+- Dataset sources are documented in the Final Report, including the referenced Kaggle links.
 
 ## Training
 
@@ -109,6 +110,7 @@ These are our project-wide default settings across all training scripts (AffectN
 - `class-weight-power`: `0.2`
 - `num-workers`: `0`
 - `label-smoothing`: `0.05`
+- `use-mtcnn`: off by default in training (enable with `--use-mtcnn`)
 
 For trying different things, override flags and go for it.
 
@@ -153,11 +155,13 @@ python3 scripts/train/train_affectnet.py \
 
 ## Evaluation
 
+Default checkpoint for evaluation scripts: `inference/resnet34_best.pth` (override with `--weights` if needed).
+If no explicit `test` split exists for a dataset, use `--split val` (and keep `--val-split` > 0).
+
 FER+:
 ```bash
 python3 scripts/eval/eval_ferplus.py \
   --data-dir data/ferplus \
-  --weights /path/to/checkpoint.pth \
   --split test \
   --output-dir outputs/ferplus_eval
 ```
@@ -166,7 +170,6 @@ RAF-DB:
 ```bash
 python3 scripts/eval/eval_raf.py \
   --data-dir data/RAF-DB \
-  --weights /path/to/checkpoint.pth \
   --split test \
   --output-dir outputs/raf_eval
 ```
@@ -175,7 +178,6 @@ AffectNet:
 ```bash
 python3 scripts/eval/eval_affectnet.py \
   --data-dir data/AffectNet \
-  --weights /path/to/checkpoint.pth \
   --split test \
   --output-dir outputs/affectnet_eval
 ```

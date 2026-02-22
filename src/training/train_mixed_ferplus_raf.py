@@ -205,7 +205,7 @@ def train_mixed_ferplus_raf(
     patience: int = 4,
     seed: int = 42,
     val_split: float = 0.1,
-    use_mtcnn: bool = True,
+    use_mtcnn: bool = False,
     mtcnn_margin: float = 0.25,
     mtcnn_device: str | None = None,
     domain_probs: Optional[List[float]] = None,

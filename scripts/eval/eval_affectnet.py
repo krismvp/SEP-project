@@ -102,6 +102,7 @@ DEFAULT_PRED_ORDER = [
     "disgust",
     "fear",
 ]
+DEFAULT_WEIGHTS = ROOT / "inference/resnet34_best.pth"
 
 
 def _adapt_conv1_to_grayscale(state: dict) -> dict:
@@ -117,11 +118,15 @@ def main() -> None:
     """Main evaluation function: Load model, evaluate on AffectNet dataset, save results."""
     parser = argparse.ArgumentParser(description="Evaluate AffectNet model on test set.")
     parser.add_argument("--data-dir", default="data/AffectNet")
-    parser.add_argument("--weights", required=True, help="Path to checkpoint .pth")
+    parser.add_argument(
+        "--weights",
+        default=str(DEFAULT_WEIGHTS),
+        help="Path to checkpoint .pth",
+    )
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--image-size", type=int, default=64)
-    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet18")
+    parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet34")
     parser.add_argument("--split", choices=["test", "val"], default="test")
     parser.add_argument("--val-split", type=float, default=0.1)
     parser.add_argument("--output-dir", default="outputs/affectnet_eval")
@@ -144,7 +149,14 @@ def main() -> None:
             f"MTCNN: enabled=True (margin={args.mtcnn_margin}, device={args.mtcnn_device})"
         )
 
-    state = torch.load(args.weights, map_location="cpu")
+    weights_path = Path(args.weights)
+    if not weights_path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint not found: {weights_path}. "
+            "Place resnet34_best.pth in inference/ or pass --weights explicitly."
+        )
+
+    state = torch.load(str(weights_path), map_location="cpu")
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
     if not isinstance(state, dict):

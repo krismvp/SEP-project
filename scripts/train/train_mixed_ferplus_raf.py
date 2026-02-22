@@ -42,7 +42,7 @@ def main() -> None:
     parser.add_argument("--patience", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-split", type=float, default=0.1)
-    parser.add_argument("--use-mtcnn", action="store_true", default=True)
+    parser.add_argument("--use-mtcnn", action="store_true")
     parser.add_argument("--no-mtcnn", action="store_true")
     parser.add_argument("--mtcnn-margin", type=float, default=0.25)
     parser.add_argument("--mtcnn-device", type=str, default="cpu")
