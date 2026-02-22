@@ -1,9 +1,7 @@
-# SEP: Emotion Recognition (CelebA, RAF-DB, FER2013, FER+)
+# SEP: Emotion Recognition (FER2013, FER+, RAF-DB, AffectNet)
 
-Self-supervised pretraining with SimCLR on CelebA, followed by fine-tuning on
-RAF-DB, FER2013, or FER+ using a ResNet backbone.
-
-Note: The presentation focuses on FER+ and RAF-DB.
+Emotion recognition training on FER2013, FER+, RAF-DB, and AffectNet datasets
+using ResNet backbones. Supports mixed-domain training for improved generalization.
 
 ## Setup
 
@@ -16,11 +14,11 @@ pip install -r requirements.txt
 
 ## Project Structure (Code Overview)
 
-- scripts/train/: training entry points (FER2013, FER+, RAF-DB, AffectNet, mixed).
+- scripts/train/: training entry points (FER2013, FER+, RAF-DB, AffectNet, mixed-domain).
 - scripts/eval/: evaluation and inference utilities (including folder inference).
 - src/data/: dataset loaders and dataset-specific preprocessing logic.
 - src/models/: model architectures and factory to build models.
-- src/preprocessing/: optional face-cropping utilities (MTCNN).
+- src/preprocessing/: optional MTCNN face detection and cropping utilities.
 - src/training/: training loops, metrics, and shared utilities.
 - outputs/: checkpoints, logs, plots, and inference CSVs.
 
@@ -36,8 +34,8 @@ python scripts/eval/predict_folder.py /path/to/images \
 
 Notes:
 - A checkpoint is required; pass it via `--weights`.
-- If your checkpoint is 6-class, predictions follow the canonical order defined in `src/constants/emotions.py`.
-- Use `--no-mtcnn` to disable face cropping.
+- All models use 6-class emotion labels following the canonical order in `src/constants/emotions.py`.
+- Use `--no-mtcnn` to disable face detection and cropping.
 
 ## Data Layout
 
@@ -74,29 +72,14 @@ data/RAF-DB/
 ```
 By default, the neutral class is dropped. Use `--include-neutral` to keep it.
 
-## Data Download and Preprocessing (Datasets Not Included)
+## Data Download and Preprocessing
 
-Datasets are not included in this repository (moodle file limit). Download them
-from the official sources and place them under the `data/` folder as shown below.
-
-### CelebA (for SimCLR pretraining)
-
-1) Download CelebA from the official site and accept the license.
-2) Extract so the folder contains:
-  - img_align_celeba/
-  - list_bbox_celeba.csv or list_bbox_celeba.txt
-  - list_eval_partition.csv or list_eval_partition.txt
-3) Place it under one of these paths (any of them is accepted):
-  - data/celeba/
-  - data/celebA/
-  - data/celebA/celeba/
-
-The loader auto-detects the files and uses the official face bounding boxes for
-cropping. No manual preprocessing is required.
+Datasets are not included in this repository. Download them from official sources
+and place them under the `data/` folder as shown below.
 
 ### FER2013 (ImageFolder)
 
-1) Download FER2013 (commonly distributed as a CSV, e.g., on Kaggle).
+1) Download FER2013 https://www.kaggle.com/datasets/msambare/fer2013
 2) Convert the CSV to images and arrange them as ImageFolder:
   - data/FER13/train/<class_name>/*.png
   - data/FER13/val/<class_name>/*.png  (optional; if missing, a random split is used)
@@ -104,7 +87,7 @@ cropping. No manual preprocessing is required.
 
 ### FER+ (ImageFolder)
 
-1) Download FER+ from the official source and extract it.
+1) Download FER+ https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset and extract it.
 2) Use either of the following layouts:
   - data/ferplus/train/<class_name>/*.png
     data/ferplus/val/<class_name>/*.png (optional)
@@ -114,7 +97,7 @@ cropping. No manual preprocessing is required.
 
 ### RAF-DB (CSV + Images)
 
-1) Download RAF-DB and extract it.
+1) Download RAF-DB https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset and extract it.
 2) Ensure the following files exist under data/RAF-DB/ (or inside DATASET/):
   - train_labels.csv
   - test_labels.csv
@@ -122,33 +105,34 @@ cropping. No manual preprocessing is required.
   - DATASET/test/<label>/*.jpg (optional)
 3) The loader expects CSVs with RAF label ids; neutral is dropped by default.
 
-### AffectNet (optional)
+### AffectNet (ImageFolder)
 
-If you use AffectNet, follow its official download instructions and provide the
-folder structure expected by scripts/train/train_affectnet.py.
+1) Download AffectNet: https://www.kaggle.com/datasets/mstjebashazida/affectnet and extract the images.
+2) Arrange as ImageFolder structure:
+  - data/AffectNet/train/<emotion_class>/*.jpg
+  - data/AffectNet/val/<emotion_class>/*.jpg (optional; random split if missing)
+3) The loader automatically maps AffectNet labels to the 6-class canonical format.
 
-## Train/Fine-tune RAF-DB
+## Training
 
-From scratch:
+### Single-Dataset Training
+
+**RAF-DB:**
 ```bash
 python scripts/train/train_raf.py --data-dir data/RAF-DB --epochs 25
 ```
 
-Fine-tune from CelebA pretrain:
-```bash
-python scripts/train/train_raf.py \
-  --data-dir data/RAF-DB \
-  --pretrained-path outputs/pretrained_backbone.pth
-```
-
-## Train/Fine-tune FER+
-
-From scratch:
+**FER+:**
 ```bash
 python scripts/train/train_ferplus.py --data-dir data/ferplus --epochs 20
 ```
 
-Fine-tune from CelebA pretrain:
+For class imbalance, use `--weighted-sampler` to balance classes or `--class-weight-power 0.5`
+to soften class weights. Use `--augmentation strong` for stronger augmentations.
+
+### Mixed-Domain Training (FER+ + RAF + AffectNet)
+
+Train on multiple datasets simultaneously with balanced sampling:
 ```bash
 python scripts/train/train_ferplus.py \
   --data-dir data/ferplus \
