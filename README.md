@@ -1,4 +1,11 @@
-# SEP Emotion Recognition
+# Facial Emotion Recognition with CNNs
+
+## Group Members
+
+- Evangelina Mihova
+- Hoang Kim Duong
+- Kris Arvind Muthukumar
+- Tugce Kanlioglu
 
 Emotion recognition project with ResNet backbones on a shared 6-class label space:
 `anger`, `disgust`, `fear`, `happy`, `sad`, `surprise`.
