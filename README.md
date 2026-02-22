@@ -87,7 +87,7 @@ and place them under the `data/` folder as shown below.
 
 ### FER+ (ImageFolder)
 
-1) Download FER+ https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset and extract it.
+1) Download FER+ https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset 
 2) Use either of the following layouts:
   - data/ferplus/train/<class_name>/*.png
     data/ferplus/val/<class_name>/*.png (optional)
@@ -97,7 +97,7 @@ and place them under the `data/` folder as shown below.
 
 ### RAF-DB (CSV + Images)
 
-1) Download RAF-DB https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset and extract it.
+1) Download RAF-DB https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset 
 2) Ensure the following files exist under data/RAF-DB/ (or inside DATASET/):
   - train_labels.csv
   - test_labels.csv
@@ -107,7 +107,7 @@ and place them under the `data/` folder as shown below.
 
 ### AffectNet (ImageFolder)
 
-1) Download AffectNet: https://www.kaggle.com/datasets/mstjebashazida/affectnet and extract the images.
+1) Download AffectNet: https://www.kaggle.com/datasets/mstjebashazida/affectnet 
 2) Arrange as ImageFolder structure:
   - data/AffectNet/train/<emotion_class>/*.jpg
   - data/AffectNet/val/<emotion_class>/*.jpg (optional; random split if missing)
