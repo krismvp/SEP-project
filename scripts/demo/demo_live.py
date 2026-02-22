@@ -29,7 +29,12 @@ class_names = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise']
 
 # ResNet34: Deeper architecture used for more precise feature extraction
 model = ResNet34(num_classes=6, in_channels=1).to(device)
-model_path = os.path.join(BASE_DIR, "../../outputs/resnet34_best.pth")
+model_path = os.path.join(BASE_DIR, "../../inference/resnet34_best.pth")
+if not os.path.exists(model_path):
+    raise FileNotFoundError(
+        f"Checkpoint not found: {model_path}. "
+        "Place resnet34_best.pth inside the repository's inference/ folder."
+    )
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 

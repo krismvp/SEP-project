@@ -28,7 +28,12 @@ class_names = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise']
 
 # Model Init (ResNet34 for deeper feature extraction)
 model = ResNet34(num_classes=6, in_channels=1).to(device)
-model_path = os.path.join(BASE_DIR, "../../outputs/resnet34_best.pth")
+model_path = os.path.join(BASE_DIR, "../../inference/resnet34_best.pth")
+if not os.path.exists(model_path):
+    raise FileNotFoundError(
+        f"Checkpoint not found: {model_path}. "
+        "Place resnet34_best.pth inside the repository's inference/ folder."
+    )
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
@@ -136,16 +141,24 @@ def process_video(input_path, output_path):
 
 if __name__ == "__main__":
     # OS-Native file picker for cross-platform usability
+    input_dir = os.path.abspath(os.path.join(BASE_DIR, "../../inputdata"))
+    output_dir = os.path.abspath(os.path.join(BASE_DIR, "../../inference"))
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
     
     selected_video = filedialog.askopenfilename(
         title="Select Video for Emotion Analysis",
+        initialdir=input_dir,
         filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv")]
     )
     if selected_video:
-        output_name = os.path.join(BASE_DIR, "../../outputs", f"processed_{os.path.basename(selected_video)}")
+        output_name = os.path.join(
+            output_dir, f"processed_{os.path.basename(selected_video)}"
+        )
         process_video(selected_video, output_name)
     else:
         print("Selection cancelled.")

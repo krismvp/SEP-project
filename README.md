@@ -1,7 +1,28 @@
-# SEP: Emotion Recognition (FER2013, FER+, RAF-DB, AffectNet)
+# SEP Emotion Recognition
 
-Emotion recognition training on FER2013, FER+, RAF-DB, and AffectNet datasets
-using ResNet backbones. Supports mixed-domain training for improved generalization.
+Emotion recognition project with ResNet backbones on a shared 6-class label space:
+`anger`, `disgust`, `fear`, `happy`, `sad`, `surprise`.
+
+## For Correctors (Run This First)
+
+Please test these two scripts:
+
+1. `process_video` (required)
+```bash
+python3 scripts/demo/process_video.py
+```
+- Put test videos in `inputdata/` (file picker opens there by default).
+- Put checkpoint at `inference/resnet34_best.pth`.
+- Output video is saved to `inference/processed_<original_filename>`.
+
+2. `predict_folder` (required)
+```bash
+python3 scripts/eval/predict_folder.py
+```
+- Default input folder: `inputdata/`
+- Default checkpoint: `inference/resnet34_best.pth`
+- Default CSV output: `inference/folder_predictions.csv`
+- Shows a live `tqdm` progress bar while running.
 
 ## Setup
 
@@ -12,150 +33,162 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Project Structure (Code Overview)
+## Repository Layout
 
-- scripts/train/: training entry points (FER2013, FER+, RAF-DB, AffectNet, mixed-domain).
-- scripts/eval/: evaluation and inference utilities (including folder inference).
-- src/data/: dataset loaders and dataset-specific preprocessing logic.
-- src/models/: model architectures and factory to build models.
-- src/preprocessing/: optional MTCNN face detection and cropping utilities.
-- src/training/: training loops, metrics, and shared utilities.
-- outputs/: checkpoints, logs, plots, and inference CSVs.
-
-## Quick Inference (Folder)
-
-Run emotion prediction on a folder of images and save scores to CSV:
-
-```bash
-python scripts/eval/predict_folder.py /path/to/images \
-  --weights /path/to/checkpoint.pth \
-  --output-csv outputs/preds/folder_predictions.csv
-```
-
-Notes:
-- A checkpoint is required; pass it via `--weights`.
-- All models use 6-class emotion labels following the canonical order in `src/constants/emotions.py`.
-- Use `--no-mtcnn` to disable face detection and cropping.
+- `scripts/train/`: training entrypoints.
+- `scripts/eval/`: evaluation and folder inference scripts.
+- `scripts/demo/`: webcam and video demo scripts.
+- `src/data/`: dataset loaders and preprocessing pipelines.
+- `src/models/`: model implementations and factory.
+- `src/training/`: training loops and utilities.
+- `inputdata/`: default inputs for inference demos.
+- `inference/`: default checkpoint and inference outputs.
+- `outputs/`: training/evaluation artifacts.
 
 ## Data Layout
 
-FER2013 (ImageFolder):
-```
-data/FER13/
-  train/
-    <class_name>/*.png
-  val/               # optional; if missing, a random split is used
-    <class_name>/*.png
+### AffectNet (ImageFolder)
+```text
+data/AffectNet/
+  train/  (or Train/ or Training/)
+    <class_name>/*.{jpg,png,...}
+  test/   (optional; or Test/ or Testing/)
+    <class_name>/*.{jpg,png,...}
 ```
 
-FER+ (ImageFolder):
-```
+### FER+ (ImageFolder)
+Supported layouts:
+```text
 data/ferplus/
-  fer2013plus/fer2013/
-    train/
-      <class_name>/*.png
-    test/             # optional
-      <class_name>/*.png
+  train/
+  val/   (optional)
+  test/  (optional)
 ```
-If no `val/` folder exists, a random split is used.
-Use `--drop-neutral` and/or `--drop-contempt` to reduce to 6 or 7 classes.
+or
+```text
+data/ferplus/fer2013plus/fer2013/
+  train/
+  val/   (optional)
+  test/  (optional)
+```
 
-RAF-DB (CSV + images):
-```
+### RAF-DB (CSV + images)
+```text
 data/RAF-DB/
   train_labels.csv
   test_labels.csv
   DATASET/
-    train/
-      <label>/*.jpg
-    # val/ and test/ are optional; if missing, val is a random split and test is skipped
+    train/*.jpg
+    test/*.jpg
 ```
-By default, the neutral class is dropped. Use `--include-neutral` to keep it.
 
-## Data Download and Preprocessing
-
-Datasets are not included in this repository. Download them from official sources
-and place them under the `data/` folder as shown below.
-
-### FER2013 (ImageFolder)
-
-1) Download FER2013 https://www.kaggle.com/datasets/msambare/fer2013
-2) Convert the CSV to images and arrange them as ImageFolder:
-  - data/FER13/train/<class_name>/*.png
-  - data/FER13/val/<class_name>/*.png  (optional; if missing, a random split is used)
-3) Class names should match the expected FER labels used in the CSV.
-
-### FER+ (ImageFolder)
-
-1) Download FER+ https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset 
-2) Use either of the following layouts:
-  - data/ferplus/train/<class_name>/*.png
-    data/ferplus/val/<class_name>/*.png (optional)
-    data/ferplus/test/<class_name>/*.png (optional)
-  - data/ferplus/fer2013plus/fer2013/train/<class_name>/*.png
-3) Neutral and contempt are automatically dropped to map into 6 classes.
-
-### RAF-DB (CSV + Images)
-
-1) Download RAF-DB https://www.kaggle.com/datasets/shuvoalok/raf-db-dataset 
-2) Ensure the following files exist under data/RAF-DB/ (or inside DATASET/):
-  - train_labels.csv
-  - test_labels.csv
-  - DATASET/train/<label>/*.jpg
-  - DATASET/test/<label>/*.jpg (optional)
-3) The loader expects CSVs with RAF label ids; neutral is dropped by default.
-
-### AffectNet (ImageFolder)
-
-1) Download AffectNet: https://www.kaggle.com/datasets/mstjebashazida/affectnet 
-2) Arrange as ImageFolder structure:
-  - data/AffectNet/train/<emotion_class>/*.jpg
-  - data/AffectNet/val/<emotion_class>/*.jpg (optional; random split if missing)
-3) The loader automatically maps AffectNet labels to the 6-class canonical format.
+Notes:
+- Loaders map labels to canonical 6 classes and drop unsupported labels (for example neutral/contempt where applicable).
+- If an explicit validation split is missing, loaders can create one with `--val-split`.
 
 ## Training
 
-### Single-Dataset Training
-
-**RAF-DB:**
+### Mixed AffectNet + FER+ + RAF
 ```bash
-python scripts/train/train_raf.py --data-dir data/RAF-DB --epochs 25
+python3 scripts/train/train_mixed_affectnet_ferplus_raf.py \
+  --affectnet-dir data/AffectNet \
+  --fer-data-dir data/ferplus \
+  --raf-data-dir data/RAF-DB \
+  --arch resnet34 \
+  --epochs 25 \
+  --output-dir outputs/mixed/affectnet_ferplus_raf_resnet34_mtcnn
 ```
 
-**FER+:**
+### Mixed FER+ + RAF
 ```bash
-python scripts/train/train_ferplus.py --data-dir data/ferplus --epochs 20
+python3 scripts/train/train_mixed_ferplus_raf.py \
+  --fer-data-dir data/ferplus \
+  --raf-data-dir data/RAF-DB \
+  --arch resnet34 \
+  --epochs 25 \
+  --output-dir outputs/mixed/ferplus_raf_resnet34_mtcnn
 ```
 
-For class imbalance, use `--weighted-sampler` to balance classes or `--class-weight-power 0.5`
-to soften class weights. Use `--augmentation strong` for stronger augmentations.
-
-### Mixed-Domain Training (FER+ + RAF + AffectNet)
-
-Train on multiple datasets simultaneously with balanced sampling:
+### Single Dataset
+FER+:
 ```bash
-python scripts/train/train_ferplus.py \
+python3 scripts/train/train_ferplus.py --data-dir data/ferplus --epochs 20
+```
+
+RAF-DB:
+```bash
+python3 scripts/train/train_raf.py --data-dir data/RAF-DB --epochs 25
+```
+
+AffectNet:
+```bash
+python3 scripts/train/train_affectnet.py --data-dir data/AffectNet --epochs 8
+```
+
+## Evaluation
+
+FER+:
+```bash
+python3 scripts/eval/eval_ferplus.py \
   --data-dir data/ferplus \
-  --pretrained-path outputs/pretrained_backbone.pth
+  --weights /path/to/checkpoint.pth \
+  --split test \
+  --output-dir outputs/ferplus_eval
 ```
-Use `--confusion-matrix` to save a test-set confusion matrix in the output dir.
-For class imbalance, try `--no-weighted-loss` to disable weights or
-`--class-weight-power 0.5` to soften them. Use `--weighted-sampler` to oversample
-minority classes.
-Use `--augmentation strong` for stronger FER-style training augmentations.
+
+RAF-DB:
+```bash
+python3 scripts/eval/eval_raf.py \
+  --data-dir data/RAF-DB \
+  --weights /path/to/checkpoint.pth \
+  --split test \
+  --output-dir outputs/raf_eval
+```
+
+AffectNet:
+```bash
+python3 scripts/eval/eval_affectnet.py \
+  --data-dir data/AffectNet \
+  --weights /path/to/checkpoint.pth \
+  --split test \
+  --output-dir outputs/affectnet_eval
+```
+
+## Inference and Demo
+
+### Folder Prediction
+Default run:
+```bash
+python3 scripts/eval/predict_folder.py
+```
+
+Explicit run:
+```bash
+python3 scripts/eval/predict_folder.py inputdata \
+  --weights inference/resnet34_best.pth \
+  --output-csv inference/folder_predictions.csv
+```
+
+### Video Processing Demo
+```bash
+python3 scripts/demo/process_video.py
+```
+
+### Live Webcam Demo
+```bash
+python3 scripts/demo/demo_live.py
+```
+Default checkpoint path for live demo:
+`inference/resnet34_best.pth`
 
 ## Outputs
 
-- RAF-DB: `outputs/finetune/` (best/last checkpoints + `training_curves.png`)
-- FER2013: `outputs/` (`training_curves.png` and best-epoch log)
-- FER+: `outputs/ferplus/` (best/last checkpoints + `training_curves.png`)
-- Pretrain: `outputs/pretrained_backbone.pth`
-- Folder inference: `outputs/preds/folder_predictions.csv` (recommended)
-
-Use `--output-dir` to avoid overwriting previous runs.
+- Inference CSV: `inference/folder_predictions.csv`
+- Processed video: `inference/processed_<original_filename>`
+- Training/evaluation artifacts: under `outputs/` and custom `--output-dir` values.
 
 ## Notes
 
-- `pillow` is required for image loading.
-- `gdown` is only needed if you want torchvision to download CelebA automatically.
-- All experiments use grayscale 1-channel inputs for cross-dataset consistency; RGB datasets are converted to grayscale at preprocessing time.
+- Inputs are converted to grayscale for cross-dataset consistency.
+- MTCNN options are available in training/evaluation/inference scripts (`--use-mtcnn`, `--no-mtcnn`).
+- If `python3` cannot import `torch`, activate the correct conda environment before running scripts.

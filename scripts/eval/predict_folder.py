@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
@@ -24,7 +25,7 @@ DEFAULT_PRED_ORDER = [
 ]
 
 DEFAULT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"]
-DEFAULT_WEIGHTS = ROOT / "outputs/mixed/ferplus_raf_best_generalization/resnet34_best.pth"
+DEFAULT_WEIGHTS = ROOT / "inference/resnet34_best.pth"
 
 
 class FolderImageDataset(Dataset):
@@ -160,7 +161,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run emotion classification on all images in a folder and export scores to CSV."
     )
-    parser.add_argument("input_dir", help="Folder containing images to classify.")
+    parser.add_argument(
+        "input_dir",
+        nargs="?",
+        default="inputdata",
+        help="Folder containing images to classify (default: inputdata).",
+    )
     parser.add_argument(
         "--weights",
         default=str(DEFAULT_WEIGHTS),
@@ -168,7 +174,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-csv",
-        default="outputs/folder_predictions.csv",
+        default="inference/folder_predictions.csv",
         help="Output CSV path.",
     )
     parser.add_argument("--arch", choices=["resnet18", "resnet34"], default="resnet34")
@@ -206,7 +212,7 @@ def main() -> None:
     if not weights_path.exists():
         raise FileNotFoundError(
             f"Checkpoint not found: {weights_path}. "
-            "Pass --weights to override the default ferplus_raf_best_generalization checkpoint."
+            "Place resnet34_best.pth in inference/ or pass --weights explicitly."
         )
 
     checkpoint = torch.load(str(weights_path), map_location="cpu")
@@ -247,6 +253,8 @@ def main() -> None:
         num_workers=args.num_workers,
         pin_memory=torch.cuda.is_available(),
     )
+    num_images = len(dataset)
+    num_batches = len(loader)
 
     output_path = Path(args.output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -256,13 +264,15 @@ def main() -> None:
         writer = csv.writer(csv_file)
         writer.writerow(["filepath"] + header)
         with torch.no_grad():
-            for images, paths in loader:
+            progress = tqdm(loader, total=num_batches, desc="Predict", unit="batch")
+            for images, paths in progress:
                 images = images.to(device, non_blocking=True)
                 outputs = model(images)
                 probs = torch.softmax(outputs, dim=1).detach().cpu().numpy()
                 for path, prob in zip(paths, probs):
                     writer.writerow([path] + [f"{prob[idx]:.4f}" for idx in order_indices])
                     total += 1
+                progress.set_postfix_str(f"images {total}/{num_images}")
 
     print(f"Processed {total} images")
     print(f"CSV saved to: {output_path}")
