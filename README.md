@@ -8,7 +8,7 @@ Emotion recognition project with ResNet backbones on a shared 6-class label spac
 - Inference Path: `inference/resnet34_best.pth`
 - Final Report: included in the submission package.
 - Training Code: `src/training/`
-**Important:** This repository is fully set up, and the best model checkpoint is **already committed** at `inference/resnet34_best.pth`.
+- **Important:** This repository is fully set up, and the best model checkpoint is **already committed** at `inference/resnet34_best.pth`.
 
 ## Setup
 
